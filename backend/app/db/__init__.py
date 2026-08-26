@@ -9,6 +9,8 @@ README.md's models/ -> table mapping for the full list.
 from app.db.base import Base, SessionLocal, engine, get_db  # noqa: F401
 
 from app.models.user import User  # noqa: F401
+from app.models.user_phase_access import UserPhaseAccess  # noqa: F401
+from app.models.audit_event import AuditEvent  # noqa: F401
 from app.models.season import Season  # noqa: F401
 from app.models.farmer import Farmer, BankDetails  # noqa: F401
 from app.models.plot import Plot, SeasonRegistration, FieldQC  # noqa: F401

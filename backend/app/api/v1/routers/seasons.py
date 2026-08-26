@@ -1,8 +1,17 @@
 """
-Season Management — Phase 0, Admin-only.
+Season Management — Phase 0, Admin-only writes.
 
-CRUD for seasons. Only one season can be active at a time (R55).
-Must exist before any farmer/plot registration can happen.
+Endpoints and behavior matched to the frontend's `features/seasons`
+module (see BACKEND_CHANGELOG.md):
+  - GET    /seasons          -> list all, newest start_date first
+  - GET    /seasons/current  -> the active season, or most recent by
+                                 start_date if none is active, or null
+  - POST   /seasons          -> create (rejects overlapping date ranges)
+  - PUT    /seasons/{id}     -> full update (rejects overlapping ranges,
+                                 excluding itself)
+
+Only one season may have status='active' at a time (R55) — enforced here
+by flipping every other season to 'closed' whenever a new one is created.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,10 +23,34 @@ from app.core.deps import get_current_user, require_role
 from app.models.season import Season
 from app.models.user import User
 from app.schemas.season import SeasonCreate, SeasonRead, SeasonUpdate
+from app.services.audit import record_audit_event
 
 router = APIRouter()
 
 _admin_only = Depends(require_role())
+
+_OVERLAP_DETAIL = "A season already exists that overlaps this period."
+
+
+def _overlaps(start_a, end_a, start_b, end_b) -> bool:
+    return start_a <= end_b and start_b <= end_a
+
+
+def _check_overlap(db: Session, start_date, end_date, exclude_id: int | None = None) -> None:
+    stmt = select(Season)
+    if exclude_id is not None:
+        stmt = stmt.where(Season.id != exclude_id)
+    for existing in db.scalars(stmt):
+        if _overlaps(existing.start_date, existing.end_date, start_date, end_date):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_OVERLAP_DETAIL)
+
+
+def _deactivate_all(db: Session, exclude_id: int | None = None) -> None:
+    stmt = select(Season).where(Season.status == "active")
+    if exclude_id is not None:
+        stmt = stmt.where(Season.id != exclude_id)
+    for s in db.scalars(stmt):
+        s.status = "closed"
 
 
 @router.post(
@@ -29,19 +62,28 @@ def create_season(
     db: Session = Depends(get_db),
     user: User = Depends(require_role()),
 ):
-    # Check name uniqueness
-    if db.scalar(select(Season).where(Season.name == body.name)) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Season '{body.name}' already exists",
-        )
+    _check_overlap(db, body.start_date, body.end_date)
 
-    # If this season should be active, deactivate all others first (R55)
-    if body.is_active:
-        _deactivate_all(db)
+    # A newly created season becomes the active one (matches the "Start
+    # New Season" flow) — deactivate any other active season first (R55).
+    _deactivate_all(db)
 
-    season = Season(**body.model_dump(), created_by=user.id)
+    season = Season(
+        year=body.year,
+        start_date=body.start_date,
+        end_date=body.end_date,
+        notes=body.notes,
+        status="active",
+        created_by=user.id,
+    )
     db.add(season)
+    db.flush()
+
+    record_audit_event(
+        db, user,
+        action="Season created", module="Seasons", record_ref=str(season.year),
+    )
+
     db.commit()
     db.refresh(season)
     return season
@@ -55,18 +97,16 @@ def list_seasons(
     return list(db.scalars(select(Season).order_by(Season.start_date.desc())))
 
 
-@router.get("/active", response_model=SeasonRead | None)
-def get_active_season(
+@router.get("/current", response_model=SeasonRead | None)
+def get_current_season(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    season = db.scalar(select(Season).where(Season.is_active == True))  # noqa: E712
-    if season is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No active season",
-        )
-    return season
+    active = db.scalar(select(Season).where(Season.status == "active"))
+    if active is not None:
+        return active
+    # Fallback: most recent season by start_date, if any exist at all.
+    return db.scalar(select(Season).order_by(Season.start_date.desc()).limit(1))
 
 
 @router.get("/{season_id}", response_model=SeasonRead)
@@ -81,49 +121,29 @@ def get_season(
     return season
 
 
-@router.patch("/{season_id}", response_model=SeasonRead, dependencies=[_admin_only])
+@router.put("/{season_id}", response_model=SeasonRead, dependencies=[_admin_only])
 def update_season(
     season_id: int,
     body: SeasonUpdate,
     db: Session = Depends(get_db),
+    admin: User = Depends(require_role()),
 ):
     season = db.get(Season, season_id)
     if season is None:
         raise HTTPException(status_code=404, detail="Season not found")
 
-    updates = body.model_dump(exclude_unset=True)
+    _check_overlap(db, body.start_date, body.end_date, exclude_id=season_id)
 
-    # If activating, deactivate all others first (R55)
-    if updates.get("is_active") is True:
-        _deactivate_all(db)
+    season.year = body.year
+    season.start_date = body.start_date
+    season.end_date = body.end_date
+    season.notes = body.notes
 
-    # Validate dates if both are being set
-    new_start = updates.get("start_date", season.start_date)
-    new_end = updates.get("end_date", season.end_date)
-    if new_end <= new_start:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="end_date must be after start_date",
-        )
-
-    # Name uniqueness
-    if "name" in updates and updates["name"] != season.name:
-        if db.scalar(select(Season).where(Season.name == updates["name"])) is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Season '{updates['name']}' already exists",
-            )
-
-    for field, value in updates.items():
-        setattr(season, field, value)
+    record_audit_event(
+        db, admin,
+        action="Season edited", module="Seasons", record_ref=str(season.year),
+    )
 
     db.commit()
     db.refresh(season)
     return season
-
-
-def _deactivate_all(db: Session) -> None:
-    """Set is_active = False on every season row."""
-    active = db.scalars(select(Season).where(Season.is_active == True)).all()  # noqa: E712
-    for s in active:
-        s.is_active = False

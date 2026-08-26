@@ -14,7 +14,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.core.enums import UserRole
+from app.core.enums import PhaseKey, UserRole
 
 
 # --------------------------------------------------------------------------
@@ -46,18 +46,34 @@ class RefreshRequest(BaseModel):
 # --------------------------------------------------------------------------
 
 class UserCreate(BaseModel):
+    """
+    Matches the frontend's CreateUserInput exactly (features/users/types.ts):
+    name, email, role, phases, and `temporaryPassword` — NOT `password`,
+    since that's the wire-format field name the httpClient's snake_case
+    transform produces (temporaryPassword -> temporary_password).
+    """
+
     email: EmailStr
-    name: str | None = None
-    password: str = Field(min_length=8, description="Initial password set by Admin (R53)")
+    name: str = Field(min_length=1)
+    temporary_password: str = Field(min_length=8, description="Initial password set by Admin (R53)")
     role: UserRole
+    phases: list[PhaseKey] = Field(min_length=1, description="At least one phase must be assigned (R58)")
 
 
 class UserUpdate(BaseModel):
-    """PATCH /users/{id} — all optional; only provided fields change."""
+    """
+    PATCH /users/{id} — all optional; only provided fields change. The
+    frontend only ever sends one of `phases` (EditPhasesForm) or `active`
+    (status toggle) at a time, never both — but either combination is
+    handled here. `role` and `password` remain available for admin use
+    even though the current UI doesn't expose them (no update-role or
+    password-reset screen yet).
+    """
 
     role: UserRole | None = None
     active: bool | None = None
     password: str | None = Field(default=None, min_length=8, description="Admin password reset")
+    phases: list[PhaseKey] | None = Field(default=None, min_length=1)
 
 
 class UserRead(BaseModel):
@@ -68,6 +84,7 @@ class UserRead(BaseModel):
     name: str | None = None
     role: UserRole
     active: bool
+    phases: list[PhaseKey] = []
     created_at: datetime
     updated_at: datetime
 
