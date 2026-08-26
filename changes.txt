@@ -1,0 +1,4 @@
+1) the users section in the admin panel should conist of the checkboxes of multiple roles
+2) Welcome start a new season option then enter the date and year and month
+3) inactive and active and delete option should be there for admin
+4) Edit options available for the every role if they entered wrong data edit history

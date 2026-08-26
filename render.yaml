@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: reliable-fresh-backend
+    runtime: python
+    plan: free
+    # Backend is a subfolder of the main project repo (alongside frontend/,
+    # CLAUDE.md, PHASE_MAP.md, etc. — see README.md's repo layout). This
+    # tells Render to run build/pre-deploy/start commands from inside
+    # backend/, not the repo root.
+    rootDir: backend
+    buildCommand: pip install .
+    # Runs after buildCommand, before startCommand — the correct place for
+    # migrations per Render's docs. Applies every migration in
+    # alembic/versions/ up to the current head on every deploy.
+    preDeployCommand: alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      # sync: false -> Render prompts you for these once, in the dashboard,
+      # during the Blueprint creation flow. Never commit real values here.
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"

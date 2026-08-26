@@ -1,0 +1,29 @@
+[project]
+name = "reliable-fresh-backend"
+version = "0.1.0"
+description = "Reliable Fresh Export Management System — FastAPI backend"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.52.1",
+    "sqlalchemy>=2.0.51",
+    "alembic>=1.19.0",
+    "psycopg2-binary>=2.9.12",
+    "python-jose[cryptography]>=3.5.0",
+    "passlib[bcrypt]>=1.7.4",
+    # passlib 1.7.4 (unmaintained since 2020) reads bcrypt's internal
+    # __about__.__version__ to detect the backend; bcrypt>=4.1 removed that
+    # attribute, breaking passlib's bcrypt backend entirely. Pin below 4.1
+    # until passlib is replaced or patched. See app/core/security.py.
+    "bcrypt<4.1",
+    "python-multipart>=0.0.32",
+    "pydantic-settings>=2.15.0",
+    "python-dotenv>=1.2.2",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

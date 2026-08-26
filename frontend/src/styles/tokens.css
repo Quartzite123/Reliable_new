@@ -1,0 +1,137 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens for Reliable Fresh.
+ * Field/lab/office/inventory workers use this on phones in bright sunlight
+ * and weak connectivity, so tokens favor high contrast and large touch
+ * targets over visual density.
+ *
+ * Visual language: a "color journey" from deep forest green (top/header,
+ * premium anchor) through green/lime (highlights, KPIs) and light green
+ * (secondary surfaces, active states) to pale cream/lime (soft backgrounds,
+ * empty states) — used as gradients and tinted accents, never as flat
+ * full-page fills.
+ */
+@theme {
+  --font-sans:
+    'Inter', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+
+  /* Brand green — re-anchored on the deep-forest journey (#076653 / #06342C)
+     at the dark end, still landing on a workable mid-green for everyday
+     buttons/links/active states. Used for: primary actions, active nav,
+     selected states, success/positive states. */
+  --color-brand-50: #f2fbf3;
+  --color-brand-100: #e2fbce;
+  --color-brand-200: #c3f0b0;
+  --color-brand-300: #8fdc93;
+  --color-brand-400: #4fc17d;
+  --color-brand-500: #22a86a;
+  --color-brand-600: #0f8f5c;
+  --color-brand-700: #076653;
+  --color-brand-800: #0e3f34;
+  --color-brand-900: #06342c;
+
+  /* Lime — the vivid accent from the journey's brightest gradient stop.
+     Sparingly: KPI highlights, progress fills, small badges/chips, gradient
+     stops. Never body text (too low-contrast on white). */
+  --color-lime-50: #fbfde8;
+  --color-lime-100: #f4f9c2;
+  --color-lime-200: #eaf291;
+  --color-lime-300: #e3ef26;
+  --color-lime-400: #cdd61f;
+  --color-lime-500: #a8b018;
+  --color-lime-600: #848c12;
+
+  /* Mint — the light-green gradient stop. Secondary surfaces, active-nav
+     background, supporting cards. */
+  --color-mint-50: #f4fbf0;
+  --color-mint-100: #e2fbce;
+  --color-mint-200: #cdf3ae;
+
+  /* Blush — the palest, warmest gradient stop. Bottom sections, empty
+     states, decorative background accents only. */
+  --color-blush-50: #fff8fb;
+  --color-blush-100: #ffddee;
+
+  /* Neutral scale re-anchored on a charcoal ink / soft gray border system,
+     so every existing `text-gray-*` / `border-gray-*` / `bg-gray-*` utility
+     picks this up automatically — no component markup changes required. */
+  --color-gray-50: #fafcfb;
+  --color-gray-100: #f3f5f4;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d7dbdf;
+  --color-gray-400: #9aa3ac;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #57606a;
+  --color-gray-700: #3f4750;
+  --color-gray-800: #2b3239;
+  --color-gray-900: #1f2933;
+
+  --color-status-passed: #0f8f5c;
+  --color-status-failed: #dc2626;
+  --color-status-blocked: #b45309;
+  --color-status-progress: #2563eb;
+  --color-status-notstarted: #6b7280;
+  --color-status-submitted: #7c3aed;
+
+  --shadow-card: 0 1px 2px rgba(6, 52, 44, 0.05), 0 1px 3px rgba(6, 52, 44, 0.07);
+  --shadow-card-hover: 0 2px 6px rgba(6, 52, 44, 0.07), 0 4px 12px rgba(6, 52, 44, 0.09);
+
+  --breakpoint-xs: 400px;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-gray-50);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Baseline touch target + focus visibility for a low-tech-literacy audience */
+button,
+a,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-brand-600);
+  outline-offset: 2px;
+}
+
+/* Color-journey gradients — used selectively (header, KPI accents, soft
+   section/empty-state backgrounds), never as a full-page background. */
+.bg-gradient-forest {
+  background-image: linear-gradient(135deg, #076653 0%, #06342c 100%);
+}
+.bg-gradient-kpi {
+  background-image: linear-gradient(135deg, #0c342c 0%, #076653 55%, #4fae3f 100%);
+}
+.bg-gradient-mint {
+  background-image: linear-gradient(135deg, #e2fbce 0%, #f4fbf0 100%);
+}
+.bg-gradient-soft {
+  background-image: linear-gradient(135deg, #fefeff 0%, #fef8fb 45%, #fbfbef 75%, #f9fbea 100%);
+}
