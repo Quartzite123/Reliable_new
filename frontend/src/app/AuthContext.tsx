@@ -6,7 +6,7 @@ import type { User } from '@/types/common'
 interface AuthContextValue {
   user: User | null
   isAuthenticated: boolean
-  login: (credentials: LoginCredentials) => Promise<void>
+  login: (credentials: LoginCredentials) => Promise<User>
   logout: () => Promise<void>
   /** Silently exchanges the held refresh token for a new access token. */
   refreshSession: () => Promise<void>
@@ -30,9 +30,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = useCallback(
-    async (credentials: LoginCredentials) => {
+    async (credentials: LoginCredentials): Promise<User> => {
       const session = await authApi.login(credentials)
       applySession(session)
+      return session.user
     },
     [applySession],
   )

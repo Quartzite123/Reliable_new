@@ -307,3 +307,50 @@ export function AlertIcon(props: IconProps) {
     </svg>
   )
 }
+export function MailIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="m3.5 7 8.5 6 8.5-6" />
+    </svg>
+  )
+}
+
+export function LockIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2.5" />
+      <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+      <path d="M12 14.5v2.5" />
+    </svg>
+  )
+}
+
+export function EyeIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+export function EyeOffIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M10.7 6.1A8.9 8.9 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-2.9 3.6" />
+      <path d="M6.3 7.9A17 17 0 0 0 2.5 12S6 18 12 18a8.9 8.9 0 0 0 3.4-.65" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+      <path d="m3.5 3.5 17 17" />
+    </svg>
+  )
+}
+
+export function ArrowRightIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4.5 12h15" />
+      <path d="m13.5 6 6 6-6 6" />
+    </svg>
+  )
+}
