@@ -4,6 +4,7 @@ Plot Registration & Field QC (Phase 2) + registration detail/queues.
 POST  /plots                          — create plot under a farmer
 PATCH /plots/{id}                     — edit (re-registration pre-fill edits)
 GET   /plots                          — list, filter by farmer
+GET   /plots/{id}                     — single plot detail
 POST  /plots/{id}/register            — season registration (unique per year, R12)
 GET   /registrations                  — filterable queue (status / season)
 GET   /registrations/{id}             — full pipeline detail for one plot+season
@@ -101,16 +102,17 @@ def list_plots(
     return list(db.scalars(stmt))
 
 
-   @router.get("/plots/{plot_id}", response_model=PlotRead)
-   def get_plot(
-       plot_id: int,
-       db: Session = Depends(get_db),
-       _: User = Depends(get_current_user),
-   ):
-       plot = db.get(Plot, plot_id)
-       if plot is None:
-           raise HTTPException(status_code=404, detail="Plot not found")
-       return plot
+@router.get("/plots/{plot_id}", response_model=PlotRead)
+def get_plot(
+    plot_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    plot = db.get(Plot, plot_id)
+    if plot is None:
+        raise HTTPException(status_code=404, detail="Plot not found")
+    return plot
+
 
 # ------------------------------------------------- Season Registration
 @router.post(
