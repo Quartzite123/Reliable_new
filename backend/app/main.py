@@ -53,13 +53,10 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
-from fastapi.staticfiles import StaticFiles
-
-from app.utils.file_upload import UPLOAD_ROOT
-
-# Uploaded files (photos, PDFs) served back at /files/...
-UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
-app.mount("/files", StaticFiles(directory=UPLOAD_ROOT), name="files")
+# /files/... static mount removed — uploads now go to Cloudinary and are
+# served directly from its CDN. The local mount could never serve anything
+# real on Render's ephemeral filesystem anyway (files were wiped on every
+# restart); keeping it would just be a dead route that always 404s.
 
 # Routers — one per backend/app/api/v1/routers/ file (see README.md for the
 # phase mapping). Extend as more land:

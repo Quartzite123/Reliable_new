@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # Cloudinary — file uploads (passbook photos, lab seal photos/documents,
+    # weighing slip photos). Required: Render's filesystem is ephemeral, so
+    # local disk storage doesn't survive a restart. Never hardcode these.
+    CLOUDINARY_CLOUD_NAME: str
+    CLOUDINARY_API_KEY: str
+    CLOUDINARY_API_SECRET: str
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
