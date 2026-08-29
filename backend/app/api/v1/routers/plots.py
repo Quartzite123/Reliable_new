@@ -101,6 +101,17 @@ def list_plots(
     return list(db.scalars(stmt))
 
 
+   @router.get("/plots/{plot_id}", response_model=PlotRead)
+   def get_plot(
+       plot_id: int,
+       db: Session = Depends(get_db),
+       _: User = Depends(get_current_user),
+   ):
+       plot = db.get(Plot, plot_id)
+       if plot is None:
+           raise HTTPException(status_code=404, detail="Plot not found")
+       return plot
+
 # ------------------------------------------------- Season Registration
 @router.post(
     "/plots/{plot_id}/register",

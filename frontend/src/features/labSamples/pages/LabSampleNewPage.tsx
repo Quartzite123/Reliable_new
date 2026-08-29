@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { EmptyState } from '@/components/data/EmptyState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { LoadingState } from '@/components/data/LoadingState'
 import { ReadOnlyReferenceCard } from '@/components/workflow/ReadOnlyReferenceCard'
 import { FormField } from '@/components/forms/FormField'
@@ -36,16 +37,17 @@ export function LabSampleNewPage() {
 }
 
 function EligiblePlotPicker({ onPick }: { onPick: (seasonRegistrationId: EntityId) => void }) {
-  const { data, isLoading } = useEligiblePlotsForLab()
+  const { data, isLoading, isError, error, refetch } = useEligiblePlotsForLab()
 
   return (
     <>
       <PageHeader title="New Lab Sample" description="Only plots that passed Field QC are shown (Business_Rules R18)." />
       {isLoading && <LoadingState rows={3} />}
-      {!isLoading && (data?.length ?? 0) === 0 && (
+      {!isLoading && isError && <ErrorState error={error} onRetry={() => refetch()} />}
+      {!isLoading && !isError && (data?.length ?? 0) === 0 && (
         <EmptyState title="No plots are ready for lab sampling" description="A plot must pass Field QC first." />
       )}
-      {!isLoading && data && data.length > 0 && (
+      {!isLoading && !isError && data && data.length > 0 && (
         <ul className="flex flex-col gap-2">
           {data.map((row) => (
             <li key={row.seasonRegistrationId}>
