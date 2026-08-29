@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { EmptyState } from '@/components/data/EmptyState'
 import { LoadingState } from '@/components/data/LoadingState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { ReadOnlyReferenceCard } from '@/components/workflow/ReadOnlyReferenceCard'
 import { Alert } from '@/components/feedback/Alert'
 import { FormField } from '@/components/forms/FormField'
@@ -36,16 +37,17 @@ export function PackagingNewPage() {
 }
 
 function EligibleHarvestPicker({ onPick }: { onPick: (harvestId: EntityId) => void }) {
-  const { data, isLoading } = useEligibleHarvestsForPackaging()
+  const { data, isLoading, isError, error, refetch } = useEligibleHarvestsForPackaging()
 
   return (
     <>
       <PageHeader title="New Packing Run" description="Only harvests that passed Arrival QC are shown." />
       {isLoading && <LoadingState rows={3} />}
-      {!isLoading && (data?.length ?? 0) === 0 && (
+      {!isLoading && isError && <ErrorState error={error} onRetry={() => refetch()} />}
+      {!isLoading && !isError && (data?.length ?? 0) === 0 && (
         <EmptyState title="No harvests are ready for packaging" description="A harvest must pass Arrival QC first." />
       )}
-      {!isLoading && data && data.length > 0 && (
+      {!isLoading && !isError && data && data.length > 0 && (
         <ul className="flex flex-col gap-2">
           {data.map((row: EligibleHarvestForPackaging) => (
             <li key={row.harvestId}>

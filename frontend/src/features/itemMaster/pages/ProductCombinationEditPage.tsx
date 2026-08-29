@@ -9,6 +9,7 @@ import { Select } from '@/components/forms/Select'
 import { CheckboxGroup } from '@/components/forms/CheckboxGroup'
 import { LoadingState } from '@/components/data/LoadingState'
 import { EmptyState } from '@/components/data/EmptyState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { useToast } from '@/app/ToastContext'
 import { toFriendlyMessage } from '@/utils/errorMessages'
 import { GRAPE_VARIETIES } from '@/features/plots'
@@ -20,10 +21,11 @@ import { productSchema, type ProductFormValues } from '../schema'
 export function ProductCombinationEditPage() {
   const { id } = useParams<{ id: string }>()
   const numericId = id ? Number(id) : undefined
-  const { data, isLoading } = useProducts()
+  const { data, isLoading, isError, error, refetch } = useProducts()
   const product = data?.find((p) => p.id === numericId)
 
   if (isLoading) return <LoadingState rows={4} />
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
   if (!product) return <EmptyState title="Product combination not found" />
 
   return <ProductCombinationForm id={product.id} />

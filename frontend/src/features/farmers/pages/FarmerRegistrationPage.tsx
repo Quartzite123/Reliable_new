@@ -7,6 +7,7 @@ import { SectionCard } from '@/components/layout/SectionCard'
 import { SearchBar } from '@/components/data/SearchBar'
 import { LoadingState } from '@/components/data/LoadingState'
 import { EmptyState } from '@/components/data/EmptyState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { Alert } from '@/components/feedback/Alert'
 import { FormField } from '@/components/forms/FormField'
 import { TextInput } from '@/components/forms/TextInput'
@@ -28,7 +29,8 @@ export function FarmerRegistrationPage() {
   const [query, setQuery] = useState('')
   const [showNewForm, setShowNewForm] = useState(false)
 
-  const { data: matches, isLoading } = useFarmerSearch(query)
+  const { data: matches, isLoading, isError, error, refetch } = useFarmerSearch(query)
+  const searchBlocked = isError && query.trim().length > 0
   const createFarmer = useCreateFarmer()
 
   const {
@@ -71,16 +73,28 @@ export function FarmerRegistrationPage() {
 
         <div className="mt-4">
           {isLoading && <LoadingState rows={2} />}
-          {!isLoading && query.trim() && matches?.length === 0 && (
+          {!isLoading && isError && (
+            <ErrorState
+              error={error}
+              onRetry={() => refetch()}
+            />
+          )}
+          {!isLoading && !isError && query.trim() && matches?.length === 0 && (
             <EmptyState title="No likely matches found" description="You can register this as a new farmer below." />
           )}
-          {!isLoading && matches && matches.length > 0 && (
+          {!isLoading && !isError && matches && matches.length > 0 && (
             <FarmerMatchList results={matches} onSelect={(farmer) => navigate(`/farmers/${farmer.id}`)} />
+          )}
+          {searchBlocked && (
+            <p className="mt-2 text-sm font-medium text-red-700">
+              The duplicate check couldn't run — resolve the error above before registering a new farmer, so you
+              don't create a duplicate record.
+            </p>
           )}
         </div>
       </SectionCard>
 
-      {!showNewForm && (
+      {!showNewForm && !searchBlocked && (
         <button
           type="button"
           onClick={() => setShowNewForm(true)}

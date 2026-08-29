@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { EmptyState } from '@/components/data/EmptyState'
 import { LoadingState } from '@/components/data/LoadingState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { FormField } from '@/components/forms/FormField'
 import { TextInput } from '@/components/forms/TextInput'
 import { NumberInput } from '@/components/forms/NumberInput'
@@ -30,16 +31,17 @@ export function HarvestNewPage() {
 }
 
 function EligiblePlotPicker({ onPick }: { onPick: (seasonRegistrationId: EntityId) => void }) {
-  const { data, isLoading } = useEligiblePlotsForHarvest()
+  const { data, isLoading, isError, error, refetch } = useEligiblePlotsForHarvest()
 
   return (
     <>
       <PageHeader title="Record Harvest" description="Only plots under contract are shown." />
       {isLoading && <LoadingState rows={3} />}
-      {!isLoading && (data?.length ?? 0) === 0 && (
+      {!isLoading && isError && <ErrorState error={error} onRetry={() => refetch()} />}
+      {!isLoading && !isError && (data?.length ?? 0) === 0 && (
         <EmptyState title="No plots are ready for harvest" description="A plot must have a signed Contract first." />
       )}
-      {!isLoading && data && data.length > 0 && (
+      {!isLoading && !isError && data && data.length > 0 && (
         <ul className="flex flex-col gap-2">
           {data.map((row) => (
             <li key={row.seasonRegistrationId}>

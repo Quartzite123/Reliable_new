@@ -1,4 +1,4 @@
-import { httpClient } from '@/api/httpClient'
+import { ApiError, httpClient } from '@/api/httpClient'
 import type { EntityId } from '@/types/common'
 import type { Customer } from '@/features/customers'
 import type { Contract } from '@/features/contracts'
@@ -71,19 +71,19 @@ export const packagingApiReal = {
     const customers = await httpClient.get<Customer[]>('/customers')
     const customer = customers.find((c) => c.id === record.customerId)
 
-    let fieldQcResult: string | undefined
+    // field-qc is a list endpoint — no records yet is a genuine [], not a
+    // 404, so any thrown error here is a real failure and must propagate.
+    const fieldQc = await httpClient.get<FieldQc[]>(`/registrations/${context.registration.id}/field-qc`)
+    const fieldQcResult = fieldQc.at(-1)?.result
+
+    // lab-sample is a single 1:1 record — 404 means "not sampled yet" (the
+    // normal case), anything else is a real failure and must propagate.
     let labResult: string | undefined
-    try {
-      const fieldQc = await httpClient.get<FieldQc[]>(`/registrations/${context.registration.id}/field-qc`)
-      fieldQcResult = fieldQc.at(-1)?.result
-    } catch {
-      // no field QC on record
-    }
     try {
       const labSample = await httpClient.get<LabSample>(`/registrations/${context.registration.id}/lab-sample`)
       labResult = labSample.result
-    } catch {
-      // no lab sample on record
+    } catch (error) {
+      if (!(error instanceof ApiError && error.status === 404)) throw error
     }
 
     return {

@@ -11,6 +11,7 @@ import { DatePicker } from '@/components/forms/DatePicker'
 import { Textarea } from '@/components/forms/Textarea'
 import { LoadingState } from '@/components/data/LoadingState'
 import { EmptyState } from '@/components/data/EmptyState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { Alert } from '@/components/feedback/Alert'
 import { useToast } from '@/app/ToastContext'
 import { toFriendlyMessage } from '@/utils/errorMessages'
@@ -22,7 +23,7 @@ import { PALLET_TYPES } from '../types'
 export function PalletisationNewPage() {
   const navigate = useNavigate()
   const { showToast } = useToast()
-  const { data: availableLots, isLoading } = useAvailableLots()
+  const { data: availableLots, isLoading, isError, error, refetch } = useAvailableLots()
   const createPallet = useCreatePallet()
 
   const [selectedBoxes, setSelectedBoxes] = useState<Record<EntityId, number>>({})
@@ -71,6 +72,7 @@ export function PalletisationNewPage() {
   }
 
   if (isLoading) return <LoadingState rows={4} />
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
 
   return (
     <>

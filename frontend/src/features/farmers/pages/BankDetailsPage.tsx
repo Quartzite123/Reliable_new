@@ -19,7 +19,13 @@ export function BankDetailsPage() {
   const farmerId = id ? Number(id) : undefined
   const navigate = useNavigate()
   const { showToast } = useToast()
-  const { data: farmer, isLoading: farmerLoading } = useFarmer(farmerId)
+  const {
+    data: farmer,
+    isLoading: farmerLoading,
+    isError: farmerError,
+    error: farmerErrorObj,
+    refetch: refetchFarmer,
+  } = useFarmer(farmerId)
   const {
     data: existing,
     isLoading: bankLoading,
@@ -50,6 +56,7 @@ export function BankDetailsPage() {
   }, [existing, reset])
 
   if (farmerLoading || bankLoading) return <LoadingState rows={4} />
+  if (farmerError) return <ErrorState error={farmerErrorObj} onRetry={() => refetchFarmer()} />
   if (bankError) return <ErrorState error={bankErrorObj} onRetry={() => refetchBank()} />
   if (!farmer) return null
 

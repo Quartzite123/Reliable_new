@@ -63,7 +63,10 @@ export const arrivalQcApiMock = {
       farmerName: context.farmer.name,
       plotNumber: context.plot.plotNumber,
       harvestDate: context.harvest.harvestDate,
-      history: arrivalQcStore.filter((r) => r.harvestId === harvestId),
+      // Mock store still allows multiple rows per harvest (for the demo
+      // re-attempt flow) — the real single-record contract only exposes
+      // the latest one here, matching what the real backend would return.
+      record: arrivalQcStore.filter((r) => r.harvestId === harvestId).at(-1) ?? null,
     }
   },
 

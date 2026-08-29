@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { EmptyState } from '@/components/data/EmptyState'
 import { LoadingState } from '@/components/data/LoadingState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { useToast } from '@/app/ToastContext'
 import { toFriendlyMessage } from '@/utils/errorMessages'
 import type { EntityId } from '@/types/common'
@@ -26,16 +27,17 @@ export function ArrivalQcNewPage() {
 }
 
 function EligibleHarvestPicker({ onPick }: { onPick: (harvestId: EntityId) => void }) {
-  const { data, isLoading } = useEligibleHarvestsForArrivalQc()
+  const { data, isLoading, isError, error, refetch } = useEligibleHarvestsForArrivalQc()
 
   return (
     <>
       <PageHeader title="New Arrival QC" description="Only harvests that have been weighed are shown." />
       {isLoading && <LoadingState rows={3} />}
-      {!isLoading && (data?.length ?? 0) === 0 && (
+      {!isLoading && isError && <ErrorState error={error} onRetry={() => refetch()} />}
+      {!isLoading && !isError && (data?.length ?? 0) === 0 && (
         <EmptyState title="No harvests are ready for Arrival QC" description="A harvest must be fully weighed first." />
       )}
-      {!isLoading && data && data.length > 0 && (
+      {!isLoading && !isError && data && data.length > 0 && (
         <ul className="flex flex-col gap-2">
           {data.map((row) => (
             <li key={row.harvestId}>

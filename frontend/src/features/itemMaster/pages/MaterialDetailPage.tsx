@@ -12,6 +12,7 @@ import { CheckboxGroup } from '@/components/forms/CheckboxGroup'
 import { DataTable, type DataTableColumn } from '@/components/data/DataTable'
 import { LoadingState } from '@/components/data/LoadingState'
 import { EmptyState } from '@/components/data/EmptyState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { useToast } from '@/app/ToastContext'
 import { toFriendlyMessage } from '@/utils/errorMessages'
 import { useMaterialMovements } from '@/features/inventory/hooks'
@@ -25,10 +26,11 @@ const MOVEMENT_LABELS: Record<string, string> = { in: 'Stock In', auto_out: 'Aut
 export function MaterialDetailPage() {
   const { id } = useParams<{ id: string }>()
   const numericId = id ? Number(id) : undefined
-  const { data, isLoading } = useMaterials()
+  const { data, isLoading, isError, error, refetch } = useMaterials()
   const material = data?.find((m) => m.id === numericId)
 
   if (isLoading) return <LoadingState rows={4} />
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
   if (!material) return <EmptyState title="Material not found" />
 
   return <PackingMaterialDetail id={material.id} />

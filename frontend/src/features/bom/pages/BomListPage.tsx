@@ -23,7 +23,7 @@ export function BomListPage() {
 
   const { data: products } = useProducts()
   const { data: customers } = useCustomers()
-  const { data: allEntries } = useBomEntries()
+  const { data: allEntries, isError: entriesError, error: entriesErrorObj, refetch: refetchEntries } = useBomEntries()
 
   const productOptions = (products ?? [])
     .filter((p) => p.isActive)
@@ -64,7 +64,11 @@ export function BomListPage() {
       </SectionCard>
 
       {productId === undefined ? (
-        <BomSummary entries={allEntries ?? []} onSelect={(id) => setSearchParams({ productId: String(id) })} />
+        entriesError ? (
+          <ErrorState error={entriesErrorObj} onRetry={() => refetchEntries()} />
+        ) : (
+          <BomSummary entries={allEntries ?? []} onSelect={(id) => setSearchParams({ productId: String(id) })} />
+        )
       ) : (
         <BomEntriesForProduct productId={productId} canManage={canManage} />
       )}

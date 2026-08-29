@@ -80,7 +80,7 @@ function LabSampleForm({
   onCreated: (id: EntityId) => void
 }) {
   const { showToast } = useToast()
-  const { data: reference, isLoading } = useLabSampleReference(seasonRegistrationId)
+  const { data: reference, isLoading, isError, error, refetch } = useLabSampleReference(seasonRegistrationId)
   const createLabSample = useCreateLabSample()
   const [varietyConfirmed, setVarietyConfirmed] = useState<string>('')
   const [sealPhoto, setSealPhoto] = useState<File | null>(null)
@@ -95,6 +95,7 @@ function LabSampleForm({
   } = useForm<LabSampleFormValues>({ resolver: zodResolver(labSampleSchema) })
 
   if (isLoading) return <LoadingState rows={4} />
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
   if (!reference) return null
 
   const onSubmit = async (values: LabSampleFormValues) => {

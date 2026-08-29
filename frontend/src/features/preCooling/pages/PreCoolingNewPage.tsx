@@ -11,6 +11,7 @@ import { TimePicker } from '@/components/forms/TimePicker'
 import { CheckboxGroup } from '@/components/forms/CheckboxGroup'
 import { LoadingState } from '@/components/data/LoadingState'
 import { EmptyState } from '@/components/data/EmptyState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { useToast } from '@/app/ToastContext'
 import { toFriendlyMessage } from '@/utils/errorMessages'
 import { useCreatePreCooling, useEligiblePalletsForPreCooling } from '../hooks'
@@ -20,7 +21,7 @@ import { preCoolingInSchema, type PreCoolingInFormValues } from '../schema'
 export function PreCoolingNewPage() {
   const navigate = useNavigate()
   const { showToast } = useToast()
-  const { data: eligiblePallets, isLoading } = useEligiblePalletsForPreCooling()
+  const { data: eligiblePallets, isLoading, isError, error, refetch } = useEligiblePalletsForPreCooling()
   const createPreCooling = useCreatePreCooling()
   const [selectedPalletIds, setSelectedPalletIds] = useState<string[]>([])
 
@@ -45,6 +46,7 @@ export function PreCoolingNewPage() {
   }
 
   if (isLoading) return <LoadingState rows={4} />
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
 
   return (
     <>

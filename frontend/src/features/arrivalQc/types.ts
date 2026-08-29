@@ -62,5 +62,9 @@ export interface ArrivalQcDetail {
   farmerName: string
   plotNumber: string
   harvestDate: string
-  history: ArrivalQc[]
+  /**
+   * One per harvest, or null if none recorded yet (the backend 404s on
+   * absence — GET /harvests/{id}/arrival-qc is a single record, not a list).
+   */
+  record: ArrivalQc | null
 }
