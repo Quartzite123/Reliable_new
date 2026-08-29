@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { EmptyState } from '@/components/data/EmptyState'
 import { LoadingState } from '@/components/data/LoadingState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { FormField } from '@/components/forms/FormField'
 import { TextInput } from '@/components/forms/TextInput'
 import { NumberInput } from '@/components/forms/NumberInput'
@@ -29,14 +30,15 @@ export function GoodsReceivingNewPage() {
 }
 
 function EligibleTripPicker({ onPick }: { onPick: (vehicleTripId: EntityId) => void }) {
-  const { data, isLoading } = useEligibleTripsForGoodsReceiving()
+  const { data, isLoading, isError, error, refetch } = useEligibleTripsForGoodsReceiving()
 
   return (
     <>
       <PageHeader title="Confirm Goods Receipt" description="Only weighed trips that haven't been confirmed yet are shown." />
       {isLoading && <LoadingState rows={3} />}
-      {!isLoading && (data?.length ?? 0) === 0 && <EmptyState title="Nothing waiting to be confirmed" />}
-      {!isLoading && data && data.length > 0 && (
+      {!isLoading && isError && <ErrorState error={error} onRetry={() => refetch()} />}
+      {!isLoading && !isError && (data?.length ?? 0) === 0 && <EmptyState title="Nothing waiting to be confirmed" />}
+      {!isLoading && !isError && data && data.length > 0 && (
         <ul className="flex flex-col gap-2">
           {data.map((row) => (
             <li key={row.vehicleTripId}>

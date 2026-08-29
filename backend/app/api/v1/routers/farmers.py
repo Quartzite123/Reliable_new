@@ -7,6 +7,7 @@ POST /farmers                — create farmer
 GET  /farmers                — list (filter by status)
 GET  /farmers/{id}           — full card: bank details + plots
 PATCH /farmers/{id}          — edit / mark inactive (soft delete, R8)
+GET  /farmers/{id}/bank-details        — read (404 if none recorded yet)
 PUT  /farmers/{id}/bank-details        — create-or-replace (Phase 1B)
 POST /farmers/{id}/bank-details/photo  — passbook photo upload
 
@@ -144,6 +145,21 @@ def update_farmer(farmer_id: int, body: FarmerUpdate, db: Session = Depends(get_
     db.commit()
     db.refresh(farmer)
     return farmer
+
+
+@router.get("/{farmer_id}/bank-details", response_model=BankDetailsRead)
+def get_bank_details(
+    farmer_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    farmer = _get_farmer_or_404(farmer_id, db)
+    if farmer.bank_details is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bank details not recorded for this farmer",
+        )
+    return farmer.bank_details
 
 
 @router.put(

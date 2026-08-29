@@ -15,7 +15,12 @@ export function FarmerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const farmerId = id ? Number(id) : undefined
   const { data: farmer, isLoading, error, refetch } = useFarmer(farmerId)
-  const { data: bankDetails } = useBankDetails(farmerId)
+  const {
+    data: bankDetails,
+    isError: bankDetailsError,
+    error: bankDetailsErrorObj,
+    refetch: refetchBankDetails,
+  } = useBankDetails(farmerId)
   const { data: plots } = usePlotsByFarmer(farmerId)
   const canEdit = usePermission('farmers:create')
   const canAddPlot = usePermission('plots:create')
@@ -58,7 +63,9 @@ export function FarmerDetailPage() {
       </SectionCard>
 
       <SectionCard title="Bank details">
-        {bankDetails ? (
+        {bankDetailsError ? (
+          <ErrorState error={bankDetailsErrorObj} onRetry={() => refetchBankDetails()} />
+        ) : bankDetails ? (
           <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <dt className="text-xs text-gray-500">Account holder</dt>

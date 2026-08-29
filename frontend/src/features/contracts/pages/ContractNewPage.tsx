@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { SectionCard } from '@/components/layout/SectionCard'
 import { EmptyState } from '@/components/data/EmptyState'
 import { LoadingState } from '@/components/data/LoadingState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { PrerequisitePanel } from '@/components/workflow/PrerequisitePanel'
 import { FormField } from '@/components/forms/FormField'
 import { NumberInput } from '@/components/forms/NumberInput'
@@ -72,7 +73,7 @@ function ContractForm({
   onCreated: (id: EntityId) => void
 }) {
   const { showToast } = useToast()
-  const { data: prereqs, isLoading } = useContractPrerequisites(seasonRegistrationId)
+  const { data: prereqs, isLoading, isError, error, refetch } = useContractPrerequisites(seasonRegistrationId)
   const createContract = useCreateContract()
 
   const {
@@ -85,6 +86,7 @@ function ContractForm({
   })
 
   if (isLoading) return <LoadingState rows={4} />
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
   if (!prereqs) return null
 
   const allMet = prereqs.fieldQcPassed && prereqs.labPassed && prereqs.bankDetailsExist

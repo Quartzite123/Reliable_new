@@ -8,6 +8,7 @@ import { FormField } from '@/components/forms/FormField'
 import { TextInput } from '@/components/forms/TextInput'
 import { FileUpload } from '@/components/forms/FileUpload'
 import { LoadingState } from '@/components/data/LoadingState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { useToast } from '@/app/ToastContext'
 import { toFriendlyMessage } from '@/utils/errorMessages'
 import { useBankDetails, useFarmer, useSaveBankDetails } from '../hooks'
@@ -19,7 +20,13 @@ export function BankDetailsPage() {
   const navigate = useNavigate()
   const { showToast } = useToast()
   const { data: farmer, isLoading: farmerLoading } = useFarmer(farmerId)
-  const { data: existing, isLoading: bankLoading } = useBankDetails(farmerId)
+  const {
+    data: existing,
+    isLoading: bankLoading,
+    isError: bankError,
+    error: bankErrorObj,
+    refetch: refetchBank,
+  } = useBankDetails(farmerId)
   const saveBankDetails = useSaveBankDetails(farmerId ?? 0)
   const [passbookPhoto, setPassbookPhoto] = useState<File | null>(null)
 
@@ -43,6 +50,7 @@ export function BankDetailsPage() {
   }, [existing, reset])
 
   if (farmerLoading || bankLoading) return <LoadingState rows={4} />
+  if (bankError) return <ErrorState error={bankErrorObj} onRetry={() => refetchBank()} />
   if (!farmer) return null
 
   const onSubmit = async (values: BankDetailsFormValues) => {

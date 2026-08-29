@@ -1,4 +1,4 @@
-import { httpClient } from '@/api/httpClient'
+import { ApiError, httpClient } from '@/api/httpClient'
 import type { EntityId } from '@/types/common'
 import type { Farmer } from '@/features/farmers'
 import type { Plot, SeasonRegistration } from '@/features/plots'
@@ -38,11 +38,21 @@ export const contractsApiReal = {
 
   async getPrerequisites(seasonRegistrationId: EntityId): Promise<ContractPrerequisites> {
     const { registration, plot, farmer } = await loadContext(seasonRegistrationId)
-    const bankDetails = await httpClient.get<unknown | null>(`/farmers/${farmer.id}/bank-details`)
+    // 404 = no bank details recorded yet (the common case this check exists
+    // to catch) — not a failure. Anything else must propagate as a real
+    // error, not be misread as "bank details missing."
+    let bankDetailsExist: boolean
+    try {
+      await httpClient.get(`/farmers/${farmer.id}/bank-details`)
+      bankDetailsExist = true
+    } catch (error) {
+      if (!(error instanceof ApiError && error.status === 404)) throw error
+      bankDetailsExist = false
+    }
     return {
       fieldQcPassed: registration.status !== 'Registered' && registration.status !== 'Field QC Failed',
       labPassed: registration.status === 'Lab Passed' || registration.status === 'Under Contract',
-      bankDetailsExist: bankDetails !== null,
+      bankDetailsExist,
       farmerId: farmer.id,
       farmerName: farmer.name,
       plotNumber: plot.plotNumber,
