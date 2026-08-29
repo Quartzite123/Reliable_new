@@ -11,6 +11,16 @@ import type {
 } from './types'
 
 /**
+ * Optional date fields (`DatePicker` inputs left blank) come out of the form
+ * as `''`, not `undefined` — but the backend's `date | None` fields reject
+ * `''` with a 422 (empty string isn't a valid ISO date). Strip it here so
+ * "not filled in" reaches the API as "omitted", not as a malformed date.
+ */
+function emptyToUndefined(value: string | undefined): string | undefined {
+  return value === '' ? undefined : value
+}
+
+/**
  * There is no `/farmers/{id}/plots` route on the real backend — plots are
  * filtered via a query param on the plain list endpoint instead (verified
  * via openapi.json: `GET /plots?farmer_id=`). `getDetail`/`registerWithFieldQc`
@@ -81,8 +91,8 @@ export const plotsApiReal = {
           surveyNo: input.surveyNo,
           gpsLat: input.gpsLat,
           gpsLong: input.gpsLong,
-          pruningDate: input.pruningDate,
-          approxHarvestDate: input.approxHarvestDate,
+          pruningDate: emptyToUndefined(input.pruningDate),
+          approxHarvestDate: emptyToUndefined(input.approxHarvestDate),
         })
       : await httpClient.post<Plot>('/plots', {
           farmerId: input.farmerId,
@@ -95,8 +105,8 @@ export const plotsApiReal = {
           surveyNo: input.surveyNo,
           gpsLat: input.gpsLat,
           gpsLong: input.gpsLong,
-          pruningDate: input.pruningDate,
-          approxHarvestDate: input.approxHarvestDate,
+          pruningDate: emptyToUndefined(input.pruningDate),
+          approxHarvestDate: emptyToUndefined(input.approxHarvestDate),
         })
 
     const registration = await httpClient.post<SeasonRegistration>(`/plots/${plot.id}/register`, {
@@ -105,8 +115,8 @@ export const plotsApiReal = {
 
     await httpClient.post<FieldQc>(`/registrations/${registration.id}/field-qc`, {
       inspectionDate: input.inspectionDate,
-      plannedSamplingDate: input.plannedSamplingDate,
-      tentativeHarvestDate: input.tentativeHarvestDate,
+      plannedSamplingDate: emptyToUndefined(input.plannedSamplingDate),
+      tentativeHarvestDate: emptyToUndefined(input.tentativeHarvestDate),
       fruitColour: input.fruitColour,
       tssPercent: input.tssPercent,
       thripsPercent: input.thripsPercent,
@@ -123,5 +133,9 @@ export const plotsApiReal = {
   },
 
   submitFollowUpFieldQc: (input: FollowUpFieldQcInput) =>
-    httpClient.post<FieldQc>(`/registrations/${input.seasonRegistrationId}/field-qc`, input),
+    httpClient.post<FieldQc>(`/registrations/${input.seasonRegistrationId}/field-qc`, {
+      ...input,
+      plannedSamplingDate: emptyToUndefined(input.plannedSamplingDate),
+      tentativeHarvestDate: emptyToUndefined(input.tentativeHarvestDate),
+    }),
 }

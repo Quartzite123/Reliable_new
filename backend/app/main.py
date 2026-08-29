@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException
 
 app = FastAPI(title="Reliable Fresh Export Management System")
 
@@ -15,6 +18,39 @@ app.add_middleware(
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+# The frontend's ApiError expects `{"message": ..., "fieldErrors"?: {field: msg}}`
+# (see frontend/src/types/common.ts ApiErrorShape) — FastAPI's defaults are
+# `{"detail": "..."}` for HTTPException and `{"detail": [...]}` for validation
+# errors, so without these the frontend silently falls back to a generic
+# "This could not be saved" message for every 4xx except 401/403/404, hiding
+# both validation errors and status-machine gate messages.
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # exc.errors() is a list of {"loc": [...], "msg": ..., "type": ...} — the
+    # frontend's fieldErrors is a flat {field: message} map, and PlotRegistrationPage
+    # (and any other form) calls setError(field, ...) with the *camelCase* form
+    # field name. `loc` is snake_case (matches the Pydantic field name); relying
+    # on httpClient's toCamel() to convert these keys on the way in, same as
+    # every other response body, is simpler than converting here.
+    field_errors: dict[str, str] = {}
+    for error in exc.errors():
+        loc = [str(part) for part in error["loc"] if part not in ("body", "query", "path")]
+        field = ".".join(loc) if loc else "detail"
+        field_errors[field] = error["msg"]
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"message": "Validation error", "fieldErrors": field_errors},
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"message": exc.detail},
+    )
 
 
 from fastapi.staticfiles import StaticFiles
