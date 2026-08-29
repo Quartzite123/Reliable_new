@@ -1,0 +1,26 @@
+# Secrets — never commit a real environment file, anywhere in the tree.
+# A committed template with placeholder values is fine and useful.
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
