@@ -17,45 +17,78 @@ import type {
  * routes are `POST/GET /registrations/{reg_id}/harvests`). Everything below
  * is composed client-side by walking `/registrations` and fetching each
  * registration's harvests.
+ *
+ * Reference data (plots, farmers) is fetched once in bulk and joined in
+ * memory, and per-registration harvest lookups run in parallel. This is the
+ * original version of this pattern — arrivalQc/api.ts and packaging/api.ts
+ * both copied it verbatim as a serial for-loop (three awaited requests per
+ * registration) and have since been fixed the same way this file now is.
+ * Never go back to looping one awaited GET per row here.
  */
-async function loadContext(seasonRegistrationId: EntityId) {
-  const registration = await httpClient.get<SeasonRegistration>(`/registrations/${seasonRegistrationId}`)
-  const plot = await httpClient.get<Plot>(`/plots/${registration.plotId}`)
-  const farmer = await httpClient.get<Farmer>(`/farmers/${plot.farmerId}`)
-  return { registration, plot, farmer }
+async function loadPlotsAndFarmers(): Promise<{ plots: Plot[]; farmers: Farmer[] }> {
+  const [plots, farmers] = await Promise.all([
+    httpClient.get<Plot[]>('/plots'),
+    httpClient.get<Farmer[]>('/farmers'),
+  ])
+  return { plots, farmers }
+}
+
+function resolveContext(
+  registration: SeasonRegistration,
+  plots: Plot[],
+  farmers: Farmer[],
+): { plot: Plot; farmer: Farmer } | null {
+  const plot = plots.find((p) => p.id === registration.plotId)
+  if (!plot) {
+    console.warn(`[harvests] registration ${registration.id}: plot ${registration.plotId} not found in /plots — skipping`)
+    return null
+  }
+  const farmer = farmers.find((f) => f.id === plot.farmerId)
+  if (!farmer) {
+    console.warn(`[harvests] registration ${registration.id}: farmer ${plot.farmerId} not found in /farmers — skipping`)
+    return null
+  }
+  return { plot, farmer }
 }
 
 async function loadAllHarvests() {
-  const registrations = await httpClient.get<SeasonRegistration[]>('/registrations')
-  const results: { harvest: Harvest; registration: SeasonRegistration; plot: Plot; farmer: Farmer }[] = []
-  for (const registration of registrations) {
-    const harvests = await httpClient.get<Harvest[]>(`/registrations/${registration.id}/harvests`)
-    if (harvests.length === 0) continue
-    const plot = await httpClient.get<Plot>(`/plots/${registration.plotId}`)
-    const farmer = await httpClient.get<Farmer>(`/farmers/${plot.farmerId}`)
-    for (const harvest of harvests) {
-      results.push({ harvest, registration, plot, farmer })
-    }
-  }
-  return results
+  const [registrations, { plots, farmers }] = await Promise.all([
+    httpClient.get<SeasonRegistration[]>('/registrations'),
+    loadPlotsAndFarmers(),
+  ])
+
+  const perRegistration = await Promise.all(
+    registrations.map(async (registration) => {
+      const harvests = await httpClient.get<Harvest[]>(`/registrations/${registration.id}/harvests`)
+      if (harvests.length === 0) return []
+      const context = resolveContext(registration, plots, farmers)
+      if (!context) return []
+      return harvests.map((harvest) => ({ harvest, registration, plot: context.plot, farmer: context.farmer }))
+    }),
+  )
+  return perRegistration.flat()
 }
 
 export const harvestsApiReal = {
   async listEligiblePlots(): Promise<EligiblePlotForHarvest[]> {
-    const registrations = await httpClient.get<SeasonRegistration[]>('/registrations')
+    const [registrations, { plots, farmers }] = await Promise.all([
+      httpClient.get<SeasonRegistration[]>('/registrations'),
+      loadPlotsAndFarmers(),
+    ])
     const eligible = registrations.filter((r) => r.status === 'Under Contract' || r.status === 'Harvested (partial)')
-    const rows: EligiblePlotForHarvest[] = []
-    for (const r of eligible) {
-      const { plot, farmer } = await loadContext(r.id)
-      rows.push({
-        seasonRegistrationId: r.id,
-        farmerName: farmer.name,
-        plotNumber: plot.plotNumber,
-        seasonYear: r.seasonYear,
-        variety: plot.variety as GrapeVariety,
+    return eligible
+      .map((r): EligiblePlotForHarvest | null => {
+        const context = resolveContext(r, plots, farmers)
+        if (!context) return null
+        return {
+          seasonRegistrationId: r.id,
+          farmerName: context.farmer.name,
+          plotNumber: context.plot.plotNumber,
+          seasonYear: r.seasonYear,
+          variety: context.plot.variety as GrapeVariety,
+        }
       })
-    }
-    return rows
+      .filter((row): row is EligiblePlotForHarvest => row !== null)
   },
 
   async list(): Promise<HarvestRow[]> {

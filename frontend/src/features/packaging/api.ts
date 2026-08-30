@@ -19,20 +19,55 @@ import type {
  * the real backend (verified via openapi.json — the only routes are
  * `POST /harvests/{harvest_id}/packaging` and the global `GET /packaging`).
  * Eligibility and detail-by-id are composed client-side.
+ *
+ * Reference data (plots, farmers) is fetched once in bulk and joined in
+ * memory, and per-registration harvest lookups run in parallel — this body
+ * was an exact copy of harvests/api.ts's original for-loop version; both
+ * have now been fixed the same way. Never go back to looping one awaited
+ * GET per row here.
  */
-async function loadAllHarvestsWithContext() {
-  const registrations = await httpClient.get<SeasonRegistration[]>('/registrations')
-  const results: { harvest: Harvest; registration: SeasonRegistration; plot: Plot; farmer: Farmer }[] = []
-  for (const registration of registrations) {
-    const harvests = await httpClient.get<Harvest[]>(`/registrations/${registration.id}/harvests`)
-    if (harvests.length === 0) continue
-    const plot = await httpClient.get<Plot>(`/plots/${registration.plotId}`)
-    const farmer = await httpClient.get<Farmer>(`/farmers/${plot.farmerId}`)
-    for (const harvest of harvests) {
-      results.push({ harvest, registration, plot, farmer })
-    }
+async function loadPlotsAndFarmers(): Promise<{ plots: Plot[]; farmers: Farmer[] }> {
+  const [plots, farmers] = await Promise.all([
+    httpClient.get<Plot[]>('/plots'),
+    httpClient.get<Farmer[]>('/farmers'),
+  ])
+  return { plots, farmers }
+}
+
+function resolveContext(
+  registration: SeasonRegistration,
+  plots: Plot[],
+  farmers: Farmer[],
+): { plot: Plot; farmer: Farmer } | null {
+  const plot = plots.find((p) => p.id === registration.plotId)
+  if (!plot) {
+    console.warn(`[packaging] registration ${registration.id}: plot ${registration.plotId} not found in /plots — skipping`)
+    return null
   }
-  return results
+  const farmer = farmers.find((f) => f.id === plot.farmerId)
+  if (!farmer) {
+    console.warn(`[packaging] registration ${registration.id}: farmer ${plot.farmerId} not found in /farmers — skipping`)
+    return null
+  }
+  return { plot, farmer }
+}
+
+async function loadAllHarvestsWithContext() {
+  const [registrations, { plots, farmers }] = await Promise.all([
+    httpClient.get<SeasonRegistration[]>('/registrations'),
+    loadPlotsAndFarmers(),
+  ])
+
+  const perRegistration = await Promise.all(
+    registrations.map(async (registration) => {
+      const harvests = await httpClient.get<Harvest[]>(`/registrations/${registration.id}/harvests`)
+      if (harvests.length === 0) return []
+      const context = resolveContext(registration, plots, farmers)
+      if (!context) return []
+      return harvests.map((harvest) => ({ harvest, registration, plot: context.plot, farmer: context.farmer }))
+    }),
+  )
+  return perRegistration.flat()
 }
 
 export const packagingApiReal = {

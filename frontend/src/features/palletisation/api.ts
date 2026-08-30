@@ -13,27 +13,49 @@ import type { AvailableLot, CreatePalletInput, Pallet, PalletDetail, PalletRow }
  * `available-lots` helper endpoint (verified via openapi.json). Available
  * lots are composed client-side from `/packaging` + `/pallets`; farmer name
  * resolution reuses the harvest -> registration -> plot -> farmer walk.
+ *
+ * The previous version (`farmerNameForHarvest`) re-fetched *all*
+ * registrations and walked their harvests from scratch on every single
+ * call, and was called once per lot inside two separate loops — an N×M
+ * pattern, not just N+1. Replaced with one bulk resolution per top-level
+ * call: fetch registrations/plots/farmers once, fetch each registration's
+ * harvests in parallel, and build a harvestId -> farmerName map so the
+ * per-lot loops become plain synchronous lookups.
  */
-async function farmerNameForHarvest(harvestId: EntityId): Promise<string> {
-  // No direct GET /harvests/{id} — walk registrations to find the owning one.
-  const registrations = await httpClient.get<SeasonRegistration[]>('/registrations')
-  for (const registration of registrations) {
-    const harvests = await httpClient.get<Harvest[]>(`/registrations/${registration.id}/harvests`)
-    if (harvests.some((h) => h.id === harvestId)) {
-      const plot = await httpClient.get<Plot>(`/plots/${registration.plotId}`)
-      const farmer = await httpClient.get<Farmer>(`/farmers/${plot.farmerId}`)
-      return farmer.name
-    }
-  }
-  return 'Unknown'
+async function loadFarmerNamesByHarvest(): Promise<Map<EntityId, string>> {
+  const [registrations, plots, farmers] = await Promise.all([
+    httpClient.get<SeasonRegistration[]>('/registrations'),
+    httpClient.get<Plot[]>('/plots'),
+    httpClient.get<Farmer[]>('/farmers'),
+  ])
+
+  const perRegistration = await Promise.all(
+    registrations.map(async (registration): Promise<Array<readonly [EntityId, string]>> => {
+      const harvests = await httpClient.get<Harvest[]>(`/registrations/${registration.id}/harvests`)
+      const plot = plots.find((p) => p.id === registration.plotId)
+      if (!plot) {
+        console.warn(`[palletisation] registration ${registration.id}: plot ${registration.plotId} not found in /plots — skipping`)
+        return []
+      }
+      const farmer = farmers.find((f) => f.id === plot.farmerId)
+      if (!farmer) {
+        console.warn(`[palletisation] registration ${registration.id}: farmer ${plot.farmerId} not found in /farmers — skipping`)
+        return []
+      }
+      return harvests.map((h) => [h.id, farmer.name] as const)
+    }),
+  )
+
+  return new Map(perRegistration.flat())
 }
 
 export const palletisationApiReal = {
   async listAvailableLots(): Promise<AvailableLot[]> {
-    const [records, pallets, customers] = await Promise.all([
+    const [records, pallets, customers, farmerNames] = await Promise.all([
       httpClient.get<PackagingRecord[]>('/packaging'),
       httpClient.get<Pallet[]>('/pallets'),
       httpClient.get<Customer[]>('/customers'),
+      loadFarmerNamesByHarvest(),
     ])
     const assigned = new Map<EntityId, number>()
     for (const pallet of pallets) {
@@ -50,7 +72,7 @@ export const palletisationApiReal = {
       rows.push({
         packagingRecordId: record.id,
         lotId: record.lotId,
-        farmerName: await farmerNameForHarvest(record.harvestId),
+        farmerName: farmerNames.get(record.harvestId) ?? 'Unknown',
         customerName: customer?.name ?? 'Unknown',
         packSize: record.packSize,
         totalBoxes: record.numBoxes,
@@ -66,23 +88,23 @@ export const palletisationApiReal = {
   },
 
   async getById(id: EntityId): Promise<PalletDetail> {
-    const [pallet, records, customers] = await Promise.all([
+    const [pallet, records, customers, farmerNames] = await Promise.all([
       httpClient.get<Pallet>(`/pallets/${id}`),
       httpClient.get<PackagingRecord[]>('/packaging'),
       httpClient.get<Customer[]>('/customers'),
+      loadFarmerNamesByHarvest(),
     ])
 
-    const lots = []
-    for (const lot of pallet.lots) {
+    const lots = pallet.lots.map((lot) => {
       const record = records.find((r) => r.id === lot.packagingRecordId)
       const customer = record && customers.find((c) => c.id === record.customerId)
-      lots.push({
+      return {
         lot,
         lotId: record?.lotId ?? 'Unknown lot',
-        farmerName: record ? await farmerNameForHarvest(record.harvestId) : 'Unknown',
+        farmerName: record ? farmerNames.get(record.harvestId) ?? 'Unknown' : 'Unknown',
         customerName: customer?.name ?? 'Unknown',
-      })
-    }
+      }
+    })
 
     return { pallet, lots }
   },
