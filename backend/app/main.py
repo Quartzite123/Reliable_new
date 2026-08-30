@@ -1,8 +1,15 @@
+import logging
+import re
+import uuid
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException
+
+logger = logging.getLogger("app")
 
 app = FastAPI(title="Reliable Fresh Export Management System")
 
@@ -50,6 +57,81 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,
         content={"message": exc.detail},
+    )
+
+
+# Known unique-constraint names -> plain-language messages. Real names
+# confirmed against the live DB (pg_constraint / pg_indexes), not guessed
+# from SQLAlchemy's naming convention — several were hand-named in
+# migrations (uq_*) while others fall back to Postgres's own
+# <table>_<column>_key default. Add a new one here whenever a new unique
+# constraint is added to a model; unmapped names fall back to a generic
+# message rather than ever leaking the constraint name to the client.
+_CONSTRAINT_MESSAGES: dict[str, str] = {
+    "uq_plots_mh_registration_number": "A plot with this MH Registration Number already exists.",
+    "uq_plots_farmer_plot_number": "This farmer already has a plot with that number.",
+    "uq_season_registrations_plot_season": "This plot is already registered for that season.",
+    "bank_details_farmer_id_key": "This farmer already has bank details on file.",
+    "arrival_qc_harvest_id_key": "Arrival QC has already been recorded for this harvest.",
+    "weighing_records_vehicle_trip_id_key": "This vehicle trip has already been weighed.",
+    "contracts_season_registration_id_key": "A contract already exists for this registration.",
+    "lab_samples_season_registration_id_key": "A lab sample has already been recorded for this registration.",
+    "customers_name_key": "A customer with this name already exists.",
+    "pallets_pallet_id_key": "That pallet ID is already in use.",
+    "purchase_orders_po_number_key": "That purchase order number is already in use.",
+    "packaging_records_lot_id_key": "That lot ID is already in use.",
+    "uq_plot_varieties_plot_variety": "This variety is already registered on this plot.",
+    "uq_user_phase_access_user_phase": "That phase is already assigned to this user.",
+    "ix_users_email": "A user with this email already exists.",
+}
+
+
+def _constraint_name(exc: IntegrityError) -> str | None:
+    diag = getattr(exc.orig, "diag", None)
+    name = getattr(diag, "constraint_name", None) if diag else None
+    if name:
+        return name
+    # Fallback for drivers/error types where .diag isn't populated — parse
+    # it out of the raw DBAPI message, e.g.:
+    # `duplicate key value violates unique constraint "uq_plots_..."`
+    match = re.search(r'constraint "([^"]+)"', str(exc.orig))
+    return match.group(1) if match else None
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    # No explicit db.rollback() here: get_db()'s `finally: db.close()` has
+    # already run by the time this handler is invoked — FastAPI tears down
+    # yield-dependencies as the endpoint's stack unwinds, before the
+    # exception reaches a registered app-level handler — and
+    # Session.close() itself rolls back any pending transaction before
+    # releasing the connection back to the pool. Verified live: a query
+    # against the same session immediately after rollback succeeds, so the
+    # connection is never left poisoned for whatever runs next.
+    name = _constraint_name(exc)
+    message = _CONSTRAINT_MESSAGES.get(name, "That value is already in use.") if name else "That value is already in use."
+    logger.warning("IntegrityError on %s %s — constraint=%s", request.method, request.url.path, name)
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"message": message},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    # Last-resort safety net for anything not already caught above (by
+    # this handler's own type or a more specific one — HTTPException,
+    # RequestValidationError, and IntegrityError are all matched before
+    # this ever runs, per Starlette's type-based handler resolution).
+    # Never return a stack trace to the browser — only a short id the user
+    # can report, with the full traceback logged server-side against it.
+    error_id = uuid.uuid4().hex[:8]
+    logger.error(
+        "Unhandled exception [%s] on %s %s", error_id, request.method, request.url.path, exc_info=exc
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"message": f"Something went wrong on our end. If this keeps happening, report error {error_id}."},
     )
 
 

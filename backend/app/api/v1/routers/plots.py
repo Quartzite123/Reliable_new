@@ -58,6 +58,15 @@ def create_plot(body: PlotCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_409_CONFLICT,
             detail=f"This farmer already has a plot numbered '{body.plot_number}' (R5)",
         )
+    if body.mh_registration_number:
+        mh_clash = db.scalar(
+            select(Plot).where(Plot.mh_registration_number == body.mh_registration_number)
+        )
+        if mh_clash is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"MH Registration Number '{body.mh_registration_number}' is already in use by another plot",
+            )
     plot = Plot(**body.model_dump())
     db.add(plot)
     db.commit()
@@ -82,6 +91,16 @@ def update_plot(plot_id: int, body: PlotUpdate, db: Session = Depends(get_db)):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"This farmer already has a plot numbered '{new_number}' (R5)",
+            )
+    new_mh = updates.get("mh_registration_number")
+    if new_mh and new_mh != plot.mh_registration_number:
+        mh_clash = db.scalar(
+            select(Plot).where(Plot.mh_registration_number == new_mh, Plot.id != plot_id)
+        )
+        if mh_clash is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"MH Registration Number '{new_mh}' is already in use by another plot",
             )
     for field, value in updates.items():
         setattr(plot, field, value)

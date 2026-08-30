@@ -82,6 +82,14 @@ def record_packaging(
         raise HTTPException(status_code=404, detail="Customer not found or inactive")
 
     contract = reg.contract
+    if contract is None:
+        # Unreachable through the normal pipeline (harvest requires a
+        # contract), but guard anyway — the rejection % MUST come from a
+        # contract, never a default.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No contract found for this registration — cannot apply rejection percent",
+        )
     pct = Decimal(contract.rejection_percent)
     total = Decimal(body.total_weight_kg)
     rejection_contract_kg = (total * pct / Decimal(100)).quantize(Decimal("0.01"))
