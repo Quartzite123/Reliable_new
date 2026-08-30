@@ -75,7 +75,7 @@ function EligibleHarvestPicker({ onPick }: { onPick: (harvestId: EntityId) => vo
 
 function PackagingForm({ harvestId, onCreated }: { harvestId: EntityId; onCreated: (id: EntityId) => void }) {
   const { showToast } = useToast()
-  const { data: eligibleHarvests, isLoading } = useEligibleHarvestsForPackaging()
+  const { data: eligibleHarvests, isLoading, isError, error, refetch } = useEligibleHarvestsForPackaging()
   const { data: customers } = useCustomers()
   const createPackaging = useCreatePackaging()
 
@@ -95,6 +95,7 @@ function PackagingForm({ harvestId, onCreated }: { harvestId: EntityId; onCreate
   const actualRejectionKg = watch('actualRejectionKg')
 
   if (isLoading) return <LoadingState rows={4} />
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
   if (!harvestInfo) return <EmptyState title="This harvest is not ready for packaging" />
 
   const availableCustomerNames = harvestInfo.variety ? customersForVariety(harvestInfo.variety) : []

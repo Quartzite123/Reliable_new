@@ -130,7 +130,7 @@ function PackingMaterialDetail({ id }: { id: number }) {
 }
 
 function StockHistorySection({ materialId }: { materialId: number }) {
-  const { data, isLoading } = useMaterialMovements(materialId)
+  const { data, isLoading, isError, error, refetch } = useMaterialMovements(materialId)
 
   const columns: DataTableColumn<StockMovement>[] = [
     { key: 'type', header: 'Type', render: (m) => MOVEMENT_LABELS[m.movementType], isPrimary: true },
@@ -142,7 +142,8 @@ function StockHistorySection({ materialId }: { materialId: number }) {
   return (
     <SectionCard title="Stock History" description="Last 20 movements for this material.">
       {isLoading && <LoadingState rows={3} />}
-      {!isLoading && <DataTable columns={columns} rows={data ?? []} getRowId={(m) => m.id} emptyTitle="No movements recorded yet" />}
+      {isError && <ErrorState error={error} onRetry={() => refetch()} />}
+      {!isLoading && !isError && <DataTable columns={columns} rows={data ?? []} getRowId={(m) => m.id} emptyTitle="No movements recorded yet" />}
     </SectionCard>
   )
 }

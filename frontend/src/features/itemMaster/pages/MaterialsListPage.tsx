@@ -17,7 +17,7 @@ type Tab = 'materials' | 'products'
 export function MaterialsListPage() {
   const navigate = useNavigate()
   const { data: materials, isLoading: loadingMaterials, error, refetch } = useMaterials()
-  const { data: products, isLoading: loadingProducts } = useProducts()
+  const { data: products, isLoading: loadingProducts, isError: productsError, error: productsErrorObj, refetch: refetchProducts } = useProducts()
   const { data: customers } = useCustomers()
   const [tab, setTab] = useState<Tab>('materials')
   const [typeFilter, setTypeFilter] = useState('')
@@ -150,7 +150,10 @@ export function MaterialsListPage() {
       {tab === 'products' && (
         <>
           {loadingProducts && <LoadingState rows={4} />}
-          {!loadingProducts && <DataTable columns={productColumns} rows={products ?? []} getRowId={(p) => p.id} emptyTitle="No products yet" />}
+          {productsError && <ErrorState error={productsErrorObj} onRetry={() => refetchProducts()} />}
+          {!loadingProducts && !productsError && (
+            <DataTable columns={productColumns} rows={products ?? []} getRowId={(p) => p.id} emptyTitle="No products yet" />
+          )}
         </>
       )}
     </>

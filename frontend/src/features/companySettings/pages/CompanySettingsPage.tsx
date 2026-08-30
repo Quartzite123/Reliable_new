@@ -7,6 +7,7 @@ import { FormField } from '@/components/forms/FormField'
 import { TextInput } from '@/components/forms/TextInput'
 import { Alert } from '@/components/feedback/Alert'
 import { LoadingState } from '@/components/data/LoadingState'
+import { ErrorState } from '@/components/data/ErrorState'
 import { useToast } from '@/app/ToastContext'
 import { toFriendlyMessage } from '@/utils/errorMessages'
 import { useCompanySettings, useUpdateCompanySettings } from '../hooks'
@@ -18,7 +19,7 @@ import { companySettingsSchema, type CompanySettingsFormValues } from '../schema
  * hardcodes these values (CLAUDE.md §12).
  */
 export function CompanySettingsPage() {
-  const { data: settings, isLoading } = useCompanySettings()
+  const { data: settings, isLoading, isError, error, refetch } = useCompanySettings()
   const { showToast } = useToast()
   const updateSettings = useUpdateCompanySettings()
 
@@ -52,6 +53,7 @@ export function CompanySettingsPage() {
   }
 
   if (isLoading) return <LoadingState rows={4} />
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
 
   return (
     <>

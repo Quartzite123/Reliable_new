@@ -31,16 +31,17 @@ export function ContractNewPage() {
 }
 
 function EligiblePlotPicker({ onPick }: { onPick: (seasonRegistrationId: EntityId) => void }) {
-  const { data, isLoading } = useEligiblePlotsForContract()
+  const { data, isLoading, isError, error, refetch } = useEligiblePlotsForContract()
 
   return (
     <>
       <PageHeader title="New Contract" description="Only plots that passed Lab are shown." />
       {isLoading && <LoadingState rows={3} />}
-      {!isLoading && (data?.length ?? 0) === 0 && (
+      {!isLoading && isError && <ErrorState error={error} onRetry={() => refetch()} />}
+      {!isLoading && !isError && (data?.length ?? 0) === 0 && (
         <EmptyState title="No plots are ready for a contract" description="A plot must pass Field QC and Lab first." />
       )}
-      {!isLoading && data && data.length > 0 && (
+      {!isLoading && !isError && data && data.length > 0 && (
         <ul className="flex flex-col gap-2">
           {data.map((row) => (
             <li key={row.seasonRegistrationId}>

@@ -20,5 +20,9 @@ export function toFriendlyMessage(error: unknown): string {
     return 'Could not reach the server. Check your connection and try again.'
   }
 
+  if (error instanceof Error) {
+    return error.message || 'Something went wrong. Please try again.'
+  }
+
   return 'Something went wrong. Please try again.'
 }
