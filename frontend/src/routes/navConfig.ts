@@ -61,7 +61,11 @@ export const SUPERVISOR_NAV: NavItem[] = [
   // Season Registrations isn't its own phase — it's part of the combined Plot Registration screen (CLAUDE.md Phase 2).
   { label: 'Season Registrations', href: '/season-registrations', permission: 'seasonRegistrations:read', phaseKey: 'plot_registration', icon: CalendarIcon },
   { label: 'Plots', href: '/plots', permission: 'plots:read', phaseKey: 'plot_registration', icon: MapPinIcon },
-  { label: 'Field QC', href: '/field-qc', permission: 'fieldQc:read', phaseKey: 'field_qc', icon: SearchCheckIcon },
+  // Field QC is recorded on the Plot registration screen, not a standalone
+  // page — the /field-qc route just points workers back to Plots, which
+  // looks unfinished as its own nav entry. Route/page left in place; restore
+  // this line if a standalone Field QC page is ever built.
+  // { label: 'Field QC', href: '/field-qc', permission: 'fieldQc:read', phaseKey: 'field_qc', icon: SearchCheckIcon },
   { label: 'Lab Sampling', href: '/lab-samples', permission: 'labSamples:read', phaseKey: 'lab_sampling', icon: FlaskIcon },
   { label: 'Contracts', href: '/contracts', permission: 'contracts:read', phaseKey: 'farmer_contract', icon: ContractIcon },
   { label: 'Harvests', href: '/harvests', permission: 'harvests:read', phaseKey: 'harvesting', icon: TruckIcon },
