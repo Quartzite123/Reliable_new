@@ -31,8 +31,12 @@ export function ActiveFarmsPage() {
   const filtered = rows.filter((r) => {
     if (season && r.registration.seasonYear !== Number(season)) return false
     if (stage && r.registration.status !== stage) return false
-    if (passFail === 'passed' && !r.registration.status.endsWith('_passed') && !['under_contract', 'harvested_partial', 'weighed', 'packed', 'palletised', 'pre_cooled'].includes(r.registration.status)) return false
-    if (passFail === 'failed' && !r.registration.status.endsWith('_failed')) return false
+    // "Passed / Advanced" = anything that isn't Registered (not_started) and
+    // isn't a Failed status — matches seasonStatusToBadgeStatus's own
+    // classification rather than re-deriving it against raw status strings.
+    const badgeStatus = seasonStatusToBadgeStatus(r.registration.status)
+    if (passFail === 'passed' && badgeStatus !== 'passed' && badgeStatus !== 'in_progress') return false
+    if (passFail === 'failed' && badgeStatus !== 'failed') return false
     return true
   })
 
