@@ -61,9 +61,9 @@ class WeighingRead(ORMModel):
     supervisor_name: str | None
     num_crates: int | None
     total_weight_kg: Decimal
-    rejection_pct: Decimal | None  # the contract's rejection_percent, snapshotted at save time
-    actual_rejection_pct: Decimal | None  # what the operator entered (or the contract default)
-    rejection_kg: Decimal | None  # calculated from MIN(actual_rejection_pct, rejection_pct)
+    rejection_pct: Decimal | None  # fixed rate actually charged (FARMER_REJECTION_PCT) — not the contract's, since 2026-08-30
+    actual_rejection_pct: Decimal | None  # operator-entered; observed only, never charged
+    rejection_kg: Decimal | None  # calculated: total_weight_kg * FARMER_REJECTION_PCT / 100 — no MIN(), no contract comparison
     net_weight_kg: Decimal | None
     slip_photo_url: str | None
 

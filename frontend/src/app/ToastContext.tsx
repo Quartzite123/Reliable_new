@@ -25,6 +25,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const showToast = useCallback(
     (message: string, variant: ToastVariant = 'info') => {
+      // An empty message is a deliberate no-op (2026-09-02) — lets
+      // errorMessages.ts's toFriendlyMessage suppress a second toast for
+      // an error the 401 interceptor already announced globally, without
+      // every `showToast(toFriendlyMessage(error), 'error')` call site
+      // needing its own `if (msg)` guard.
+      if (!message) return
       const id = crypto.randomUUID()
       setToasts((current) => [...current, { id, message, variant }])
       setTimeout(() => dismissToast(id), 5000)

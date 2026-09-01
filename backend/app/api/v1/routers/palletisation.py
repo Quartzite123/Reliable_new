@@ -118,6 +118,10 @@ def create_pallet(
         )
     db.add(pallet)
 
+    # Packed -> Palletised, set inline here rather than via a status_machine.py
+    # guard function — this is one of the two exceptions status_machine.py's
+    # module docstring names explicitly. No 409 on a registration in the
+    # wrong status; it's silently skipped instead.
     for reg in registrations.values():
         if reg.status == RegistrationStatus.PACKED:
             reg.status = RegistrationStatus.PALLETISED

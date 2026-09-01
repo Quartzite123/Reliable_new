@@ -60,7 +60,8 @@ farmers ──1───► bank_details                                        
    │ 1
    ▼ N
  plots (permanent land record, persists across seasons;
-   │    no variety column as of 2026-08-11)
+   │    DOES have a variety column live in code, despite the 2026-08-11 plan
+   │    to remove it — see Section 7's `plots` entry, flagged 2026-09-02)
    │ 1
    ▼ N
  plot_varieties (added 2026-08-11 — variety registered per plot here,     [Phase 2]
@@ -253,7 +254,7 @@ Extracted from the original Phase 1–5 discovery spec. These apply to **every p
 
 2. **Fuzzy search over exact match** — farmer/plot search must tolerate spelling mistakes on names by returning likely matches for the worker to confirm. Exact-text matching on Indian farmer names is unreliable.
 
-3. **Business key vs. database key** — the database uses invisible internal IDs as primary keys. Business/human identifiers (Plot Number, MH Number — `farmers.mh_number` as of 2026-08-11, corrected here from the stale "Plot MH Registration Number") are unique constraints for record integrity but never exposed as the primary "key" to users.
+3. **Business key vs. database key** — the database uses invisible internal IDs as primary keys. Business/human identifiers (Plot Number, MH Number) are unique constraints for record integrity but never exposed as the primary "key" to users. *(Which table MH Number lives on is UNRESOLVED as of 2026-09-02 — see Section 7's `farmers`/`plots` table definitions and the conflict flagged there and in the tail "New information" section. Don't restate `farmers.mh_number` as settled; the live column is `plots.mh_registration_number`.)*
 
 4. **Persistent records, seasonal actions** — Farmer, Plot, and Bank Details are permanent records that persist across seasons. Registration, QC, Contract, Harvest are seasonal events attached to those permanent records. No "delete" — inactive/failed records are kept for audit.
 
@@ -301,9 +302,9 @@ Unique constraint: `(user_id, phase_key)`
 
 **`plots`** (Phase 2) — permanent, persists across seasons
 `id` PK · `farmer_id` FK→farmers · `plot_number` string (unique within farmer, R5) · ~~`mh_registration_number` string, unique~~ ~~`variety` enum~~ · `area_acres` decimal · `village` string · `taluka` string · `survey_no` string · `gps_lat`, `gps_long` decimal · `pruning_date` date · `approx_harvest_date` date · `created_at`, `updated_at`
-*Note (rewritten 2026-08-11): two columns removed from this table.*
-*1. `mh_registration_number` — this note (and the strikethrough above) describe the 2026-08-11 decision, which the actual code does not follow — see the conflict flag under the `farmers` table above. `plots.mh_registration_number` is live in `backend/app/models/plot.py` today; it was never actually removed.*
-*2. `variety` — removed; a plot can contain multiple grape varieties. Variety is now registered per-plot via the new `plot_varieties` table below, not as a plot column. (Superseded note: an earlier revision of this document said variety instead lives on `harvests` — that was corrected the same day, see `plot_varieties` and the `harvests` entry below.)*
+*Note (rewritten 2026-08-11, both halves corrected 2026-09-02 — neither column was actually removed):*
+*1. `mh_registration_number` — this note (and the strikethrough above) describe the 2026-08-11 decision, which the actual code does not follow — see the conflict flag under the `farmers` table above. `plots.mh_registration_number` is live in `backend/app/models/plot.py:51` today; it was never actually removed. **UNRESOLVED**, not a documentation lag to just fix in one direction — see the `farmers` table note above and `Open_Questions.md` Q16.*
+*2. `variety` — the plan was to remove it: a plot can contain multiple grape varieties, registered per-plot via the new `plot_varieties` table instead of as a plot column. **That plan was never carried out.** `backend/app/models/plot.py:52` still has a live `variety` string column, and it is not inert — `frontend/src/features/plots/pages/PlotRegistrationPage.tsx` has it as a *required* field on the plot registration form, and `backend/app/api/v1/routers/weighing.py:77` reads `reg.plot.variety` directly for the Weighing screen's reference panel, not via `season_registration → plot_variety` as this document's own Phase 6/8 screen notes (Section 11.1/11.3) claim. `plot_varieties` has a full backend (model, router, schemas) but no frontend screen anywhere in the codebase, so `season_registrations.plot_variety_id` is always null in practice — the multi-variety pipeline below is unreachable by any current user action. This is a real gap (build the `plot_varieties` UI, then move `weighing.py:77` and the plot registration form off `plots.variety`), not a documentation lag — flagged 2026-09-02, see `CLAUDE.md` Section 12 and `Business_Rules.md` R7 for the matching correction. (Superseded note, still historically accurate: an earlier revision of this document said variety instead lives on `harvests` — that was corrected the same day, 2026-08-11; `harvests` genuinely has no variety column, that part of the original correction was right.)*
 *`num_trees` remains explicitly dropped — not tracked (unrelated, pre-existing decision).*
 
 **`plot_varieties`** (Phase 2, added 2026-08-11) — varieties grown on a plot
@@ -487,7 +488,7 @@ Captured here as a decision log so context isn't lost now that the working draft
 ### Resolved during CEO confirmation round (2026-08-11)
 - **Season Management.** Confirmed as a real module (Phase 0), not just a year tag. See Section 2, Section 7 (`seasons` table), `Business_Rules.md` R55.
 - **Multi-variety plots (Q4) — ✅ RESOLVED 2026-08-11, corrected same day.** The previous Aug 2026 resolution ("one plot = one variety") is confirmed incorrect. CEO confirmed the actual answer: one plot can hold multiple varieties, each variety gets its own independent pipeline (registration, Field QC, Lab Sample, Contract, Harvest — R57). Variety is registered per plot via the new `plot_varieties` table — **not** on `harvests` as an earlier same-day pass of this document said; that was corrected within the same round. This is settled, not open — `CLAUDE.md`, `PHASE_MAP.md`, and `Business_Rules.md` all now mark Q4 RESOLVED. **Flag:** `Open_Questions.md` itself was not touched in this round and still says "REOPENED" for Q4 — a real cross-document inconsistency until that file is updated to match (see change report).
-- **MH registration number (R2/R7a).** Reversed from plot-level back to farmer-level. CEO confirmation overrides the earlier APEDA-documentation-based correction. See Section 7 (`farmers.mh_number`), `Business_Rules.md` R2/R7a.
+- ~~**MH registration number (R2/R7a).** Reversed from plot-level back to farmer-level...~~ **This was never actually settled — see the UNRESOLVED flag in Section 7's `farmers`/`plots` entries (added 2026-09-02) and `Open_Questions.md` Q16.** The farmer-level reversal recorded here at the time conflicts with this same document's own tail "New information" section, and with the live code, which is per-plot. Do not read this bullet as a decision to build against.
 - **Packaging Supervisor role added.** Palletisation moved from Office Worker to this new role. See Section 5.
 - **Purchase Order module dropped (Q12).** No fertilizer purchases, no formal PO process needed. Tables remain in the DB, unused, pending removal.
 - **Finished Goods QC position (Q13).** Confirmed: after Palletisation, before Pre-Cooling. One check, not two. Exact fields still pending a CEO document. Phase 13 added to the phase table.

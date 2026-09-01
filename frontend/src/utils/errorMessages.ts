@@ -9,6 +9,12 @@ import { ApiError } from '@/api/httpClient'
  */
 export function toFriendlyMessage(error: unknown): string {
   if (error instanceof ApiError) {
+    // The 401 interceptor (httpClient.ts) already showed a toast and
+    // redirected to /login for this one (session expired / password
+    // changed) — an empty string here relies on ToastContext.showToast's
+    // own guard to turn this into a genuine no-op, not a second, blank
+    // toast (2026-09-02).
+    if (error.handledGlobally) return ''
     if (error.status === 401) return 'Your session has expired. Please log in again.'
     if (error.status === 403) return 'You do not have permission to do this.'
     if (error.status === 404) return 'This record could not be found.'

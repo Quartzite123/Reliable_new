@@ -64,6 +64,19 @@ _credentials_exc = HTTPException(
     headers={"WWW-Authenticate": "Bearer"},
 )
 
+# Distinct from _credentials_exc (2026-09-02, session-expiry UX fix) so
+# the frontend can skip a doomed refresh attempt: if the ACCESS token
+# fails this check, the refresh token from the same login (or any
+# refresh chain descending from it) is structurally guaranteed to fail
+# the identical check in POST /auth/refresh — both were minted before
+# whatever password change moved password_changed_at forward. No point
+# spending a network round-trip finding that out.
+_password_changed_exc = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail={"message": "Your password was changed. Please log in again.", "code": "password_changed"},
+    headers={"WWW-Authenticate": "Bearer"},
+)
+
 
 def token_predates_password_change(payload: dict, user: User) -> bool:
     """
@@ -116,7 +129,7 @@ def get_current_user(
             detail="Account is deactivated",
         )
     if token_predates_password_change(payload, user):
-        raise _credentials_exc
+        raise _password_changed_exc
     return user
 
 

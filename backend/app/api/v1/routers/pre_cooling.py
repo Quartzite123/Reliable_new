@@ -52,7 +52,13 @@ def _read(record: PreCoolingRecord) -> PreCoolingRead:
 
 
 def _apply_completion(db: Session, record: PreCoolingRecord) -> None:
-    """Pallet created -> pre_cooling; registrations PALLETISED -> PRE_COOLED."""
+    """Pallet created -> pre_cooling; registrations PALLETISED -> PRE_COOLED.
+
+    Set inline here rather than via a status_machine.py guard function —
+    this is one of the two exceptions status_machine.py's module docstring
+    names explicitly. No 409 on a registration in the wrong status; the loop
+    below just silently skips it instead.
+    """
     pallet = record.pallet
     if pallet.status == PalletStatus.CREATED:
         pallet.status = PalletStatus.PRE_COOLING

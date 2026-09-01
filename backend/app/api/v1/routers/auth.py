@@ -64,6 +64,16 @@ _invalid_refresh = HTTPException(
     detail="Invalid or expired refresh token",
 )
 
+# Same distinction as core/deps.py's _password_changed_exc, mirrored here
+# for POST /auth/refresh (2026-09-02) — the frontend interceptor
+# normally never reaches this path for the password-changed case (it
+# short-circuits on the access token's own 401 first, see httpClient.ts),
+# but this is still the correct response if it ever does.
+_password_changed_refresh = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail={"message": "Your password was changed. Please log in again.", "code": "password_changed"},
+)
+
 
 def _lockout_exception(locked_until: datetime) -> HTTPException:
     minutes_left = max(1, int((locked_until - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() // 60) + 1)
@@ -139,7 +149,7 @@ def refresh(body: RefreshRequest, db: Session = Depends(get_db)) -> AccessToken:
     if user is None or not user.active:
         raise _invalid_refresh
     if token_predates_password_change(payload, user):
-        raise _invalid_refresh
+        raise _password_changed_refresh
     return AccessToken(access_token=create_access_token(str(user.id)))
 
 

@@ -1,10 +1,14 @@
 """
-THE single place where season_registrations.status changes.
+THE place where season_registrations.status changes for every transition
+through Weighed -> Arrival QC Passed/Failed -> Packed. NOT the single place
+for the whole pipeline — see the two exceptions below, corrected 2026-09-02
+(this docstring previously claimed to be the single place unconditionally,
+which the code has never actually matched).
 
-Routers NEVER set status directly — they call these functions, which
-validate the transition and raise 409 on any illegal jump. This is the
-backend gate enforcement demanded by CLAUDE.md ("Never let frontend
-bypass a gate") and Business Rules R13, R17, R18, R23, R26.
+Routers calling into these functions NEVER set status directly — they call
+these functions, which validate the transition and raise 409 on any illegal
+jump. This is the backend gate enforcement demanded by CLAUDE.md ("Never let
+frontend bypass a gate") and Business Rules R13, R17, R18, R23, R26.
 
 Pipeline (PHASE_MAP.md Section 4):
   Registered -> Field QC Passed/Failed -> Lab Passed/Failed
@@ -16,6 +20,19 @@ Failure states:
   - Lab Failed       -> terminal for the season (per current rules)
   - Arrival QC Failed-> terminal for now (DB has one arrival_qc per
                         harvest — see routers/arrival_qc.py note)
+
+EXCEPTIONS — Packed -> Palletised and Palletised -> Pre-Cooled are NOT
+handled by this module. They're set inline, directly on the model, inside
+the routers that own those two steps:
+  - Packed -> Palletised:   app/api/v1/routers/palletisation.py:121-123
+  - Palletised -> Pre-Cooled: app/api/v1/routers/pre_cooling.py:54-62
+                              (_apply_completion)
+Neither site has a can_*()-style guard function, and neither raises 409 on
+a registration in the wrong status — the inline `if reg.status == ...` just
+silently skips that registration instead of erroring. This is flagged, not
+fixed, here — the transitions still work, they're just inconsistent with
+every other transition's error behavior. Refactor separately if it's worth
+doing; don't assume it's already this module's problem to solve.
 """
 
 from fastapi import HTTPException, status as http_status

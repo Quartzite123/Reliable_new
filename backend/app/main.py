@@ -79,6 +79,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
+    # detail can be a dict (2026-09-02, session-expiry work) — e.g.
+    # {"message": "...", "code": "password_changed"} — passed through
+    # as-is so the frontend can branch on `code`. Every existing call
+    # site passes a plain string and keeps working exactly as before.
+    if isinstance(exc.detail, dict):
+        return JSONResponse(status_code=exc.status_code, content=exc.detail)
     return JSONResponse(
         status_code=exc.status_code,
         content={"message": exc.detail},
@@ -103,7 +109,6 @@ _CONSTRAINT_MESSAGES: dict[str, str] = {
     "lab_samples_season_registration_id_key": "A lab sample has already been recorded for this registration.",
     "customers_name_key": "A customer with this name already exists.",
     "pallets_pallet_id_key": "That pallet ID is already in use.",
-    "purchase_orders_po_number_key": "That purchase order number is already in use.",
     "packaging_records_lot_id_key": "That lot ID is already in use.",
     "uq_plot_varieties_plot_variety": "This variety is already registered on this plot.",
     "uq_user_phase_access_user_phase": "That phase is already assigned to this user.",
