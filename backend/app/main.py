@@ -9,13 +9,22 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException
 
+from app.core.config import settings
+
 logger = logging.getLogger("app")
 
 app = FastAPI(title="Reliable Fresh Export Management System")
 
+# Pinned to settings.FRONTEND_ORIGINS (2026-09-01 security audit fix #5) —
+# previously ["*"], which combined with allow_credentials=True is a real
+# misconfiguration (Starlette reflects the request's actual Origin instead
+# of a literal "*" once credentials are allowed, verified live with a
+# forged Origin header — any site was trusted for credentialed requests).
+# Set FRONTEND_ORIGINS in the environment to the deployed frontend's exact
+# origin(s); see core/config.py.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: lock down to the deployed frontend origin(s) for production
+    allow_origins=settings.frontend_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -176,12 +185,19 @@ app.include_router(arrival_qc.router, prefix="/api/v1", tags=["arrival qc"])
 app.include_router(packaging.router, prefix="/api/v1", tags=["packaging"])
 app.include_router(customers.router, prefix="/api/v1", tags=["customers & settings"])
 
-from app.api.v1.routers import inventory, palletisation, pre_cooling, purchase_orders
+from app.api.v1.routers import inventory, palletisation, pre_cooling
 
 app.include_router(inventory.router, prefix="/api/v1", tags=["inventory & bom"])
 app.include_router(palletisation.router, prefix="/api/v1", tags=["palletisation"])
 app.include_router(pre_cooling.router, prefix="/api/v1", tags=["pre-cooling"])
-app.include_router(purchase_orders.router, prefix="/api/v1", tags=["purchase orders"])
+
+# purchase_orders.router is deliberately NOT included. CLAUDE.md §12/§7
+# (Phase 12) confirms the Purchase Order module is out of scope — no
+# fertilizer purchases, no PO process needed (CEO, 2026-08-11). The
+# purchase_orders/purchase_order_line_items tables still exist in the DB
+# and are slated for removal in a future migration; the router file itself
+# is left in app/api/v1/routers/ unregistered rather than deleted, in case
+# removal needs to be staged separately from unregistering the routes.
 
 # Not yet scoped (no tables/specs): Finished Goods QC, Container Indent,
 # Container Loading, Farmer Invoice, Export Documents.

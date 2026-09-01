@@ -94,9 +94,11 @@ export const SUPERVISOR_NAV: NavItem[] = [
       { label: 'Alerts', href: '/inventory/alerts', permission: 'inventory:read', phaseKey: 'inventory_management' },
     ],
   },
-  // Neither Documents nor Reports maps to one of the 14 phases (both are future/unscoped modules,
-  // CLAUDE.md §13) — no phaseKey means always-visible under the new phase-based nav filter. Their
+  // Documents and Reports are future/unscoped modules (CLAUDE.md §13). A 'reports_documents' phase
+  // exists as a placeholder for them (added 2026-09-01, same pattern as 'finished_goods_qc') but
+  // isn't wired here yet — no phaseKey means always-visible under the phase-based nav filter. Their
   // routes are still gated by the pre-existing permission system in routeConfig.tsx (unchanged).
+  // Wire phaseKey: 'reports_documents' here once these modules are actually built.
   { label: 'Documents', href: '/export-documents', permission: 'exportDocuments:read', icon: DocumentIcon },
   { label: 'Reports', href: '/reports', permission: 'reports:read', icon: ChartIcon },
 ]
@@ -104,7 +106,7 @@ export const SUPERVISOR_NAV: NavItem[] = [
 export const ADMIN_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/admin/dashboard', permission: 'dashboard:read', phaseKey: 'admin', icon: HomeIcon },
   { label: 'Active Farms', href: '/admin/active-farms', permission: 'activeFarms:read', phaseKey: 'admin', icon: FarmersIcon },
-  { label: 'Users', href: '/admin/users', permission: 'users:manage', phaseKey: 'admin', icon: UsersCogIcon },
+  { label: 'Users', href: '/admin/users', permission: 'users:manage', phaseKey: 'users', icon: UsersCogIcon },
   { label: 'Seasons', href: '/admin/seasons', permission: 'seasons:manage', phaseKey: 'admin', icon: CalendarIcon },
   { label: 'User Activity', href: '/admin/user-activity', permission: 'userActivity:read', phaseKey: 'admin', icon: RecordsIcon },
   { label: 'Audit Trail', href: '/admin/audit-trail', permission: 'auditLog:read', phaseKey: 'admin', icon: ChartIcon },

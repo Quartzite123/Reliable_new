@@ -24,7 +24,3 @@ export interface ChangePasswordInput {
   currentPassword: string
   newPassword: string
 }
-
-export interface ForgotPasswordInput {
-  email: string
-}

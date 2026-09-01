@@ -12,6 +12,13 @@ module (see BACKEND_CHANGELOG.md):
 
 Only one season may have status='active' at a time (R55) — enforced here
 by flipping every other season to 'closed' whenever a new one is created.
+
+Reads are scoped to the admin phase — only SeasonsPage reads them today;
+plot registration doesn't yet pull the active season live (CLAUDE.md §7,
+season_registrations.season_id FK still pending). Writes are now on the
+same admin phase gate too (Step 3 conversion, 2026-09-01), replacing
+require_role() (no-args = admin-only) — role is no longer checked
+anywhere in this file.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,7 +26,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.core.deps import get_current_user, require_role
+from app.core.deps import require_phase
+from app.core.enums import PhaseKey
 from app.models.season import Season
 from app.models.user import User
 from app.schemas.season import SeasonCreate, SeasonRead, SeasonUpdate
@@ -27,7 +35,7 @@ from app.services.audit import record_audit_event
 
 router = APIRouter()
 
-_admin_only = Depends(require_role())
+_admin_phase = Depends(require_phase(PhaseKey.ADMIN))
 
 _OVERLAP_DETAIL = "A season already exists that overlaps this period."
 
@@ -55,12 +63,12 @@ def _deactivate_all(db: Session, exclude_id: int | None = None) -> None:
 
 @router.post(
     "", response_model=SeasonRead,
-    status_code=status.HTTP_201_CREATED, dependencies=[_admin_only],
+    status_code=status.HTTP_201_CREATED, dependencies=[_admin_phase],
 )
 def create_season(
     body: SeasonCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role()),
+    user: User = Depends(require_phase(PhaseKey.ADMIN)),
 ):
     _check_overlap(db, body.start_date, body.end_date)
 
@@ -89,19 +97,13 @@ def create_season(
     return season
 
 
-@router.get("", response_model=list[SeasonRead])
-def list_seasons(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
-):
+@router.get("", response_model=list[SeasonRead], dependencies=[_admin_phase])
+def list_seasons(db: Session = Depends(get_db)):
     return list(db.scalars(select(Season).order_by(Season.start_date.desc())))
 
 
-@router.get("/current", response_model=SeasonRead | None)
-def get_current_season(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
-):
+@router.get("/current", response_model=SeasonRead | None, dependencies=[_admin_phase])
+def get_current_season(db: Session = Depends(get_db)):
     active = db.scalar(select(Season).where(Season.status == "active"))
     if active is not None:
         return active
@@ -109,24 +111,20 @@ def get_current_season(
     return db.scalar(select(Season).order_by(Season.start_date.desc()).limit(1))
 
 
-@router.get("/{season_id}", response_model=SeasonRead)
-def get_season(
-    season_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
-):
+@router.get("/{season_id}", response_model=SeasonRead, dependencies=[_admin_phase])
+def get_season(season_id: int, db: Session = Depends(get_db)):
     season = db.get(Season, season_id)
     if season is None:
         raise HTTPException(status_code=404, detail="Season not found")
     return season
 
 
-@router.put("/{season_id}", response_model=SeasonRead, dependencies=[_admin_only])
+@router.put("/{season_id}", response_model=SeasonRead, dependencies=[_admin_phase])
 def update_season(
     season_id: int,
     body: SeasonUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_role()),
+    admin: User = Depends(require_phase(PhaseKey.ADMIN)),
 ):
     season = db.get(Season, season_id)
     if season is None:

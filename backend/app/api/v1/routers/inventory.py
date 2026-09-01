@@ -1,7 +1,6 @@
 """
 Item Master + BOM + Stock (Phase 9). Stock/Inventory Manager role (Admin
-passes all gates as usual). Read access open to all authenticated users —
-Packaging's material reference panel reads from here.
+passes all gates as usual).
 
 Materials:  POST/GET/PATCH /inventory/materials   (soft deactivate, no delete)
 Products:   POST/GET/PATCH /inventory/products    (feeds Packaging cascade)
@@ -11,6 +10,17 @@ Stock:      POST /inventory/stock-in
             GET  /inventory/movements
             GET  /inventory/alerts                (computed stock <= reorder point)
 Calculator: POST /inventory/order-calculator      (the Excel BOM's Order Qty row)
+
+All reads here are scoped to inventory_management alone: despite this
+module's docstring previously claiming "Packaging's material reference
+panel reads from here," no current packaging code (features/packaging/
+api.ts, PackagingNewPage.tsx) calls any /inventory/* or /bom endpoint —
+that panel is a planned future feature (CLAUDE.md §9 technical notes,
+"once built"), not a live consumer. Narrow this again if that panel ships.
+
+Writes are gated on inventory_management too (Step 3 conversion,
+2026-09-01), replacing require_role(STOCK_MANAGER) — role is no longer
+checked anywhere in this file.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -18,8 +28,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.core.deps import get_current_user, require_role
-from app.core.enums import MaterialType, MovementType, UserRole
+from app.core.deps import require_phase
+from app.core.enums import MaterialType, MovementType, PhaseKey
 from app.models.customer import Customer
 from app.models.inventory import BOMEntry, ItemMasterMaterial, ItemMasterProduct, StockMovement
 from app.models.user import User
@@ -45,7 +55,7 @@ from app.services.inventory import compute_stock, compute_stock_bulk, low_stock_
 
 router = APIRouter()
 
-_stock_manager = Depends(require_role(UserRole.STOCK_MANAGER))
+_inventory_phase = Depends(require_phase(PhaseKey.INVENTORY_MANAGEMENT))
 
 
 def _material_read(material: ItemMasterMaterial, stock: int) -> MaterialRead:
@@ -57,12 +67,12 @@ def _material_read(material: ItemMasterMaterial, stock: int) -> MaterialRead:
 # ---------------------------------------------------------------- Materials
 @router.post(
     "/inventory/materials", response_model=MaterialRead,
-    status_code=status.HTTP_201_CREATED, dependencies=[_stock_manager],
+    status_code=status.HTTP_201_CREATED, dependencies=[_inventory_phase],
 )
 def create_material(
     body: MaterialCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(UserRole.STOCK_MANAGER)),
+    user: User = Depends(require_phase(PhaseKey.INVENTORY_MANAGEMENT)),
 ):
     material = ItemMasterMaterial(**body.model_dump(), is_active=True, created_by=user.id)
     db.add(material)
@@ -71,12 +81,11 @@ def create_material(
     return _material_read(material, 0)
 
 
-@router.get("/inventory/materials", response_model=list[MaterialRead])
+@router.get("/inventory/materials", response_model=list[MaterialRead], dependencies=[_inventory_phase])
 def list_materials(
     material_type: MaterialType | None = None,
     include_inactive: bool = Query(default=False),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     stmt = select(ItemMasterMaterial).order_by(
         ItemMasterMaterial.material_type, ItemMasterMaterial.variant_name
@@ -90,7 +99,7 @@ def list_materials(
     return [_material_read(m, stocks[m.id]) for m in materials]
 
 
-@router.patch("/inventory/materials/{material_id}", response_model=MaterialRead, dependencies=[_stock_manager])
+@router.patch("/inventory/materials/{material_id}", response_model=MaterialRead, dependencies=[_inventory_phase])
 def update_material(material_id: int, body: MaterialUpdate, db: Session = Depends(get_db)):
     material = db.get(ItemMasterMaterial, material_id)
     if material is None:
@@ -105,7 +114,7 @@ def update_material(material_id: int, body: MaterialUpdate, db: Session = Depend
 # ---------------------------------------------------------------- Products
 @router.post(
     "/inventory/products", response_model=ProductRead,
-    status_code=status.HTTP_201_CREATED, dependencies=[_stock_manager],
+    status_code=status.HTTP_201_CREATED, dependencies=[_inventory_phase],
 )
 def create_product(body: ProductCreate, db: Session = Depends(get_db)):
     if db.get(Customer, body.customer_id) is None:
@@ -130,12 +139,11 @@ def create_product(body: ProductCreate, db: Session = Depends(get_db)):
     return product
 
 
-@router.get("/inventory/products", response_model=list[ProductRead])
+@router.get("/inventory/products", response_model=list[ProductRead], dependencies=[_inventory_phase])
 def list_products(
     customer_id: int | None = None,
     include_inactive: bool = Query(default=False),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     stmt = select(ItemMasterProduct).order_by(ItemMasterProduct.variety)
     if customer_id is not None:
@@ -145,7 +153,7 @@ def list_products(
     return list(db.scalars(stmt))
 
 
-@router.patch("/inventory/products/{product_id}", response_model=ProductRead, dependencies=[_stock_manager])
+@router.patch("/inventory/products/{product_id}", response_model=ProductRead, dependencies=[_inventory_phase])
 def update_product(product_id: int, body: ProductUpdate, db: Session = Depends(get_db)):
     product = db.get(ItemMasterProduct, product_id)
     if product is None:
@@ -158,7 +166,7 @@ def update_product(product_id: int, body: ProductUpdate, db: Session = Depends(g
 
 
 # ---------------------------------------------------------------- BOM
-@router.post("/bom", response_model=BOMEntryRead, status_code=status.HTTP_201_CREATED, dependencies=[_stock_manager])
+@router.post("/bom", response_model=BOMEntryRead, status_code=status.HTTP_201_CREATED, dependencies=[_inventory_phase])
 def create_bom_entry(body: BOMEntryCreate, db: Session = Depends(get_db)):
     if db.get(ItemMasterProduct, body.product_id) is None:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -182,11 +190,10 @@ def create_bom_entry(body: BOMEntryCreate, db: Session = Depends(get_db)):
     return entry
 
 
-@router.get("/bom", response_model=list[BOMEntryRead])
+@router.get("/bom", response_model=list[BOMEntryRead], dependencies=[_inventory_phase])
 def list_bom(
     product_id: int | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     stmt = select(BOMEntry).order_by(BOMEntry.product_id, BOMEntry.material_id)
     if product_id is not None:
@@ -194,7 +201,7 @@ def list_bom(
     return list(db.scalars(stmt))
 
 
-@router.patch("/bom/{entry_id}", response_model=BOMEntryRead, dependencies=[_stock_manager])
+@router.patch("/bom/{entry_id}", response_model=BOMEntryRead, dependencies=[_inventory_phase])
 def update_bom_entry(entry_id: int, body: BOMEntryUpdate, db: Session = Depends(get_db)):
     entry = db.get(BOMEntry, entry_id)
     if entry is None:
@@ -214,7 +221,7 @@ def update_bom_entry(entry_id: int, body: BOMEntryUpdate, db: Session = Depends(
 def stock_in(
     body: StockInCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(UserRole.STOCK_MANAGER)),
+    user: User = Depends(require_phase(PhaseKey.INVENTORY_MANAGEMENT)),
 ):
     if db.get(ItemMasterMaterial, body.material_id) is None:
         raise HTTPException(status_code=404, detail="Material not found")
@@ -240,7 +247,7 @@ def stock_in(
 def stock_adjustment(
     body: StockAdjustmentCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(UserRole.STOCK_MANAGER)),
+    user: User = Depends(require_phase(PhaseKey.INVENTORY_MANAGEMENT)),
 ):
     if body.quantity == 0:
         raise HTTPException(status_code=422, detail="Adjustment quantity cannot be zero")
@@ -266,11 +273,10 @@ def stock_adjustment(
     return movement
 
 
-@router.get("/inventory/movements", response_model=list[MovementRead])
+@router.get("/inventory/movements", response_model=list[MovementRead], dependencies=[_inventory_phase])
 def list_movements(
     material_id: int | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     stmt = select(StockMovement).order_by(StockMovement.id.desc()).limit(500)
     if material_id is not None:
@@ -278,8 +284,8 @@ def list_movements(
     return list(db.scalars(stmt))
 
 
-@router.get("/inventory/alerts", response_model=list[LowStockAlert])
-def low_stock_alerts(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+@router.get("/inventory/alerts", response_model=list[LowStockAlert], dependencies=[_inventory_phase])
+def low_stock_alerts(db: Session = Depends(get_db)):
     alerts = []
     for material, stock in low_stock_materials(db):
         alerts.append(
@@ -294,11 +300,10 @@ def low_stock_alerts(db: Session = Depends(get_db), _: User = Depends(get_curren
 
 
 # ------------------------------------------------- Order calculator
-@router.post("/inventory/order-calculator", response_model=OrderCalcResponse)
+@router.post("/inventory/order-calculator", response_model=OrderCalcResponse, dependencies=[_inventory_phase])
 def order_calculator(
     body: OrderCalcRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     """The Excel BOM's bottom rows as an endpoint:
     required = qty_per_container × containers; to_order = required − stock."""

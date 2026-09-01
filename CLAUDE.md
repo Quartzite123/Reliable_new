@@ -2,7 +2,9 @@
 
 > **Purpose:** This is the master context file for the entire project. Any agent, developer, or AI working on this project should read this file FIRST before touching any code or spec. It captures every decision, discovery, assumption, and plan from the Phase 0 discovery sessions, and is kept current as the project moves into build.
 >
-> **Last updated:** 2026-08-31 — founder confirmation folded in: the 7% farmer rejection deduction is a FIXED company-wide constant, not a per-contract negotiated term — reverses Discovery 7 below, and reverses the matching "never hardcode 7%" rule in Section 12. See `Business_Rules.md` R24/R28/R48 (rewritten) for full detail.
+> **Last updated:** 2026-09-01 — security audit + admin user-management overhaul folded in: login timing/rate-limiting/token-revocation fixes, CORS pinned, password minimum raised to 12; a new **Users** phase splits user management out of Admin (with a full backend-enforced boundary — see `backend/app/services/user_admin_guard.py`), a **Reports & Documents** placeholder phase was added (same pattern as Finished Goods QC), and password policy is now explicit: admin-set passwords are permanent, there is no self-service or email-based reset, and `scripts/seed_admin.py` is the documented break-glass recovery procedure. See Section 6 (roles/login) and Section 12 (never-do list) below.
+>
+> **Previously:** 2026-08-31 — founder confirmation folded in: the 7% farmer rejection deduction is a FIXED company-wide constant, not a per-contract negotiated term — reverses Discovery 7 below, and reverses the matching "never hardcode 7%" rule in Section 12. See `Business_Rules.md` R24/R28/R48 (rewritten) for full detail.
 >
 > **Previously:** 2026-08-11 — CEO confirmation round folded in: Season Management is now a real module (not just a year tag), plots can hold multiple varieties (see same-day follow-up below for where variety actually lives), MH registration number moved back to the farmer level, a new Packaging Supervisor role was added, the Purchase Order module was dropped entirely, Finished Goods QC's position in the pipeline was confirmed, and the inventory-ordering pattern was confirmed. See `Business_Rules.md` R55/R56 and the rewritten R2/R7/R7a/R21, and `Open_Questions.md` Q4 (**resolved**, not reopened — see 2026-08-11 same-day follow-up below), Q11/Q12/Q13 (resolved) for full detail.
 >
@@ -155,6 +157,10 @@ These emerged from discovery and should never be violated. (Full list, with the 
 
 Login: email as username, admin-created accounts only, no self-signup. Each user has individual login — no shared accounts (audit trail requirement).
 
+**Password policy (confirmed 2026-09-01):** admin-set passwords are permanent by design — there is no forced change at next login, and no self-service or email-based reset (the "Forgot Password?" link and its page were removed from the login screen entirely; `ChangePasswordPage` remains, but that's a signed-in user changing their own password, not a reset flow). If someone is locked out, an Admin or Users-phase holder resets their password from the Users screen — this immediately invalidates every session that account currently holds (access and refresh tokens), by design. Account recovery when there's no working Admin account left at all is `scripts/seed_admin.py`, run directly against the database — a documented break-glass procedure, not a UI feature. The resulting root-admin credentials go in the confidential client handover document, never in this repo.
+
+A **Users** phase (added 2026-09-01, split out of Admin) grants user management — create/edit/deactivate/assign-phases on non-Admin accounts — without full Admin access. It cannot grant itself, cannot grant the Admin role, and cannot see or touch any account that holds the Admin phase; Admin accounts always hold every phase and no one (including another Admin) can remove one from them via the API. See `backend/app/services/user_admin_guard.py` for the enforced rule set — this is backend logic, not a UI restriction.
+
 Full role × phase access matrix is in `PHASE_MAP.md` Section 5.
 
 ---
@@ -288,9 +294,12 @@ Open_Questions.md       — 14 numbered questions; several resolved as of 2026-0
 - Never deploy on raw VPS or big cloud without a dedicated DevOps person — use Render/Railway
 - Never treat `packaging_records.customer_name` or `item_master_products.customer` as plain strings going forward — both are now `customer_id` FKs into a real `customers` table (see Section 8 decision, `PHASE_MAP.md` Section 7)
 - Never leave GGN number or company letterhead details hardcoded — pull from `company_settings` (see Section 8 decision, `PHASE_MAP.md` Section 7)
-- Never build or expose the Purchase Order module — confirmed out of scope by CEO (2026-08-11). `purchase_orders`/`purchase_order_line_items` tables exist in the DB but are unused and slated for removal in a future migration.
+- Never build or expose the Purchase Order module — confirmed out of scope by CEO (2026-08-11). Its router is unregistered from `app/main.py` as of 2026-09-01 (routes return 404); the `purchase_orders`/`purchase_order_line_items` tables and the router file itself still exist, unused, slated for removal in a future migration.
 - Never use `users.role` for permission checks — always check `user_phase_access`. Role is a display label only (added 2026-08-11; see `PHASE_MAP.md` Section 5/7, `Business_Rules.md` R53/R58).
 - Never store variety directly on `plots` or `harvests` — variety is registered per plot via `plot_varieties` (added 2026-08-11); `harvests` inherits it through `season_registration → plot_variety`, never its own column (see `Business_Rules.md` R57).
+- Never build a self-service or email-based password reset ("Forgot Password") — confirmed out of scope 2026-09-01. Admin-set passwords are permanent by design; recovery with no working Admin account is `scripts/seed_admin.py`, run directly against the database, documented as a break-glass procedure, not a UI feature.
+- Never gate a `/users/*` mutation on `require_phase(PhaseKey.USERS)` alone and assume that's the whole security boundary — a Users-phase holder still can't touch Admin accounts, grant `users`/`admin`, or edit their own phases. That logic lives in `backend/app/services/user_admin_guard.py`, not in the route dependency (added 2026-09-01).
+- Never let an Admin account's phase set become anything other than all of them — `PhaseKey.ADMIN` membership must always imply holding every other phase too. `user_admin_guard.forced_admin_phases()`/`assert_admin_phases_immutable()` enforce this server-side; don't bypass it with a direct write.
 
 ---
 

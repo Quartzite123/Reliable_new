@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { usersApi } from './index'
-import type { CreateUserInput, SetUserStatusInput, SoftDeleteUserInput, UpdateUserPhasesInput } from './types'
+import type { CreateUserInput, ResetLockoutInput, SetUserStatusInput, SoftDeleteUserInput, UpdateUserInput } from './types'
 
 const KEY = ['users'] as const
 
@@ -16,10 +16,10 @@ export function useCreateUser() {
   })
 }
 
-export function useUpdateUserPhases() {
+export function useUpdateUser() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: UpdateUserPhasesInput) => usersApi.updatePhases(input),
+    mutationFn: (input: UpdateUserInput) => usersApi.update(input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
   })
 }
@@ -36,6 +36,14 @@ export function useSoftDeleteUser() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: SoftDeleteUserInput) => usersApi.softDelete(input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  })
+}
+
+export function useResetLockout() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ResetLockoutInput) => usersApi.resetLockout(input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
   })
 }

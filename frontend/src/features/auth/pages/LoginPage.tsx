@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/app/AuthContext'
 import { FormField } from '@/components/forms/FormField'
 import { Alert } from '@/components/feedback/Alert'
@@ -122,20 +122,19 @@ export function LoginPage() {
                 </div>
               </FormField>
 
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 accent-blue-600"
-                  />
-                  Remember me
-                </label>
-                <Link to="/forgot-password" className="text-sm font-medium text-brand-700 hover:text-brand-800 hover:underline">
-                  Forgot Password?
-                </Link>
-              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 accent-blue-600"
+                />
+                Remember me
+              </label>
+              {/* No "Forgot Password?" link — no self-service reset exists.
+                  Admin-set passwords are permanent by design; account
+                  recovery is scripts/seed_admin.py as a documented
+                  break-glass procedure (2026-09-01). */}
 
               <button
                 type="submit"

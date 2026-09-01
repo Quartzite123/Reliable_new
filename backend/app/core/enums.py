@@ -143,10 +143,18 @@ class POStatus(str, Enum):
 
 class PhaseKey(str, Enum):
     """
-    The 14 phases a user can be individually assigned to via
+    The phases a user can be individually assigned to via
     `user_phase_access` (added 2026-08-23). `users.role` is a display
     label only — actual screen access is phase-based. Values matched
     exactly to the frontend's `types/common.ts::PhaseKey`.
+
+    USERS (added 2026-09-01) is the user-management phase, split out of
+    the previous admin-does-everything model — see app/services/
+    user_admin_guard.py for the actual security boundary between a USERS
+    holder and an ADMIN holder; the phase gate alone isn't the whole
+    story here. REPORTS_DOCUMENTS is a placeholder, same pattern as
+    FINISHED_GOODS_QC — it gates the not-yet-built Reports and Export
+    Documents modules (CLAUDE.md §13) and gates nothing today.
     """
 
     FARMER_REGISTRATION = "farmer_registration"
@@ -163,6 +171,8 @@ class PhaseKey(str, Enum):
     PRE_COOLING = "pre_cooling"
     FINISHED_GOODS_QC = "finished_goods_qc"
     ADMIN = "admin"
+    USERS = "users"
+    REPORTS_DOCUMENTS = "reports_documents"
 
 
 __all__ = [

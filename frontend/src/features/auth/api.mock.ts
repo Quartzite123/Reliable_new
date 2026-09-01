@@ -1,7 +1,7 @@
 import { ApiError } from '@/api/httpClient'
 import type { EntityId } from '@/types/common'
 import { usersStore } from '@/features/users/mockStore'
-import type { AuthSession, AuthTokens, ChangePasswordInput, ForgotPasswordInput, LoginCredentials } from './types'
+import type { AuthSession, AuthTokens, ChangePasswordInput, LoginCredentials } from './types'
 
 function delay(ms = 350) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -44,10 +44,6 @@ export const authApiMock = {
   },
 
   async changePassword(_input: ChangePasswordInput): Promise<void> {
-    await delay()
-  },
-
-  async forgotPassword(_input: ForgotPasswordInput): Promise<void> {
     await delay()
   },
 }

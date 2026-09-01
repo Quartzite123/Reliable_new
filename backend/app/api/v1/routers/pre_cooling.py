@@ -1,6 +1,14 @@
 """
-Pre-Cooling (Phase 11). Office Worker or Stock Manager (role assignment
-pending CEO — Open Question #9; both allowed for now).
+Pre-Cooling (Phase 11). Gated on the pre_cooling phase throughout (Step 3
+conversion, 2026-09-01), replacing require_role(OFFICE_WORKER,
+STOCK_MANAGER) — role is no longer checked anywhere in this file.
+
+Ownership of this phase is still provisional pending Open Question #9 (the
+CEO hasn't confirmed who owns Pre-Cooling). Current live grant:
+stockmanager holds pre_cooling (added 2026-09-01 — cold storage was judged
+closer to stock management than office paperwork); officeworker does not.
+Revisit this grant once Q9 is answered — it may need to move to
+officeworker, or both, depending on the CEO's call.
 
 POST  /pre-cooling                — batch entry: one record per pallet_id;
                                     out-fields optional (partial save)
@@ -17,8 +25,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.core.deps import get_current_user, require_role
-from app.core.enums import PalletStatus, RegistrationStatus, UserRole
+from app.core.deps import require_phase
+from app.core.enums import PalletStatus, PhaseKey, RegistrationStatus
 from app.models.palletisation import Pallet
 from app.models.pre_cooling import PreCoolingRecord
 from app.models.user import User
@@ -26,7 +34,8 @@ from app.schemas.palletisation import PreCoolingComplete, PreCoolingCreate, PreC
 
 router = APIRouter()
 
-_pre_cooling_roles = require_role(UserRole.OFFICE_WORKER, UserRole.STOCK_MANAGER)
+_pre_cooling_gate = require_phase(PhaseKey.PRE_COOLING)
+_pre_cooling_phase = Depends(_pre_cooling_gate)
 
 
 def _is_complete(record: PreCoolingRecord) -> bool:
@@ -57,7 +66,7 @@ def _apply_completion(db: Session, record: PreCoolingRecord) -> None:
 def create_pre_cooling(
     body: PreCoolingCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(_pre_cooling_roles),
+    user: User = Depends(_pre_cooling_gate),
 ):
     records = []
     for pallet_pk in body.pallet_ids:
@@ -107,7 +116,7 @@ def complete_pre_cooling(
     record_id: int,
     body: PreCoolingComplete,
     db: Session = Depends(get_db),
-    _: User = Depends(_pre_cooling_roles),
+    _: User = Depends(_pre_cooling_gate),
 ):
     record = db.get(PreCoolingRecord, record_id)
     if record is None:
@@ -126,11 +135,10 @@ def complete_pre_cooling(
     return _read(record)
 
 
-@router.get("/pre-cooling", response_model=list[PreCoolingRead])
+@router.get("/pre-cooling", response_model=list[PreCoolingRead], dependencies=[_pre_cooling_phase])
 def list_pre_cooling(
     incomplete_only: bool = Query(default=False),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     stmt = select(PreCoolingRecord).order_by(PreCoolingRecord.id.desc())
     if incomplete_only:

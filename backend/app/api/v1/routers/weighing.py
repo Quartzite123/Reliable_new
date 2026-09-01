@@ -23,6 +23,12 @@ POST /vehicle-trips/{id}/weighing — one weighing per trip (weighing slip #937 
                                     * flags crate mismatch vs harvest count
                                       (red inline warning, does NOT block)
 POST /weighing/{id}/slip-photo    — weighbridge slip photo (camera upload)
+
+Everything in this file is scoped to the weighing phase alone (Step 3
+conversion, 2026-09-01) — no other feature reads or writes weighing data,
+so GET /weighing and GET /weighing/{id}'s former FIELD_WORKER/OFFICE_WORKER
+role gate collapses to the same single phase as the rest of the file.
+Role is no longer checked anywhere in this file.
 """
 
 from decimal import Decimal
@@ -33,8 +39,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
 from app.core.constants import FARMER_REJECTION_PCT
-from app.core.deps import get_current_user, require_role
-from app.core.enums import UserRole
+from app.core.deps import require_phase
+from app.core.enums import PhaseKey
 from app.models.company_settings import CompanySettings
 from app.models.harvest import Harvest, VehicleTrip
 from app.models.plot import Plot, SeasonRegistration
@@ -55,8 +61,7 @@ def _crate_tare_weight_kg(db: Session) -> Decimal:
 
 router = APIRouter()
 
-_field_worker = Depends(require_role(UserRole.FIELD_WORKER))
-_field_or_office = Depends(require_role(UserRole.FIELD_WORKER, UserRole.OFFICE_WORKER))
+_weighing_phase = Depends(require_phase(PhaseKey.WEIGHING))
 
 
 def _trip_with_context(trip: VehicleTrip) -> PendingTripRead:
@@ -74,11 +79,10 @@ def _trip_with_context(trip: VehicleTrip) -> PendingTripRead:
     )
 
 
-@router.get("/weighing/pending", response_model=list[PendingTripRead])
+@router.get("/weighing/pending", response_model=list[PendingTripRead], dependencies=[_weighing_phase])
 def pending_trips(
     farmer_id: int | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     stmt = (
         select(VehicleTrip)
@@ -120,7 +124,7 @@ def _weighing_response(record: WeighingRecord, trip: VehicleTrip) -> WeighingRea
     return out
 
 
-@router.get("/weighing", response_model=list[WeighingRead], dependencies=[_field_or_office])
+@router.get("/weighing", response_model=list[WeighingRead], dependencies=[_weighing_phase])
 def list_weighing(
     harvest_id: int | None = None,
     db: Session = Depends(get_db),
@@ -137,7 +141,7 @@ def list_weighing(
     return [_weighing_response(r, r.vehicle_trip) for r in records]
 
 
-@router.get("/weighing/{record_id}", response_model=WeighingRead, dependencies=[_field_or_office])
+@router.get("/weighing/{record_id}", response_model=WeighingRead, dependencies=[_weighing_phase])
 def get_weighing(record_id: int, db: Session = Depends(get_db)):
     record = db.get(WeighingRecord, record_id)
     if record is None:
@@ -154,7 +158,7 @@ def record_weighing(
     trip_id: int,
     body: WeighingCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(UserRole.FIELD_WORKER)),
+    user: User = Depends(require_phase(PhaseKey.WEIGHING)),
 ):
     trip = db.get(VehicleTrip, trip_id)
     if trip is None:
@@ -217,7 +221,7 @@ def record_weighing(
     return _weighing_response(record, trip)
 
 
-@router.post("/weighing/{record_id}/slip-photo", response_model=WeighingRead, dependencies=[_field_worker])
+@router.post("/weighing/{record_id}/slip-photo", response_model=WeighingRead, dependencies=[_weighing_phase])
 def upload_slip_photo(record_id: int, file: UploadFile, db: Session = Depends(get_db)):
     from app.utils.file_upload import save_upload
 

@@ -5,7 +5,6 @@ import { RequirePermission } from './RequirePermission'
 import { RequirePhase } from './RequirePhase'
 import type { PermissionKey } from '@/permissions/permissions'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
-import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage'
 import { ChangePasswordPage } from '@/features/auth/pages/ChangePasswordPage'
 import { HomePage } from '@/pages/HomePage'
 import { TasksPage } from '@/pages/TasksPage'
@@ -97,7 +96,6 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
       <Route element={<ProtectedRoute />}>
         {/* Standalone print page — no sidebar/header chrome, opened in a new tab from the Order Calculator. */}
@@ -257,7 +255,11 @@ export function AppRoutes() {
             </Route>
           ))}
 
-          <Route element={<RequirePhase phase="admin" />}>
+          {/* Split from the admin phase 2026-09-01 — a Users-phase holder
+              manages accounts without needing full Admin access (see
+              backend app/services/user_admin_guard.py for the actual
+              boundary between the two). */}
+          <Route element={<RequirePhase phase="users" />}>
             <Route path="/admin/users" element={<UsersPage />} />
           </Route>
           <Route element={<RequirePhase phase="admin" />}>

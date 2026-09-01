@@ -17,8 +17,8 @@ import { toFriendlyMessage } from '@/utils/errorMessages'
 import { cn } from '@/utils/cn'
 import { ROLE_LABELS } from '@/permissions/permissions'
 import type { PhaseKey, Role, User } from '@/types/common'
-import { useCreateUser, useSetUserStatus, useSoftDeleteUser, useUpdateUserPhases, useUsers } from '../hooks'
-import { createUserSchema, updateUserPhasesSchema, type CreateUserFormValues, type UpdateUserPhasesFormValues } from '../schema'
+import { useCreateUser, useResetLockout, useSetUserStatus, useSoftDeleteUser, useUpdateUser, useUsers } from '../hooks'
+import { createUserSchema, updateUserSchema, type CreateUserFormValues, type UpdateUserFormValues } from '../schema'
 import { ALL_PHASES, PHASE_LABELS } from '../phaseLabels'
 
 const ROLE_OPTIONS: Array<{ value: Role; label: string }> = (
@@ -30,15 +30,16 @@ const PHASE_GROUPS: Array<{ label: string; phases: PhaseKey[] }> = [
   { label: 'Field Operations', phases: ['farmer_registration', 'plot_registration', 'field_qc', 'harvesting', 'weighing', 'arrival_qc'] },
   { label: 'Packhouse', phases: ['lab_sampling', 'farmer_contract', 'packaging', 'palletisation', 'pre_cooling', 'finished_goods_qc'] },
   { label: 'Inventory', phases: ['inventory_management'] },
-  { label: 'Administration', phases: ['admin'] },
+  { label: 'Administration', phases: ['admin', 'users', 'reports_documents'] },
 ]
 
 /**
  * Our `User` type only has `active: boolean` — no separate "deleted" state
- * exists to distinguish a soft-deleted account from a merely deactivated
- * one, so the status badge is two-state (Active/Inactive). "Delete" still
- * disables login exactly like deactivating; the audit log is what records
- * a delete as distinct from a deactivation.
+ * exists to distinguish a soft-deactivated account from a merely inactive
+ * one, so the status badge is two-state (Active/Inactive). "Deactivate"
+ * (renamed from "Delete" 2026-09-01 — it only ever disabled login, never
+ * removed the record) is mechanically identical to toggling the Active
+ * switch off; the audit log is what records which affordance was used.
  */
 const ACTIVE_STYLES: Record<'true' | 'false', string> = {
   true: 'bg-brand-100 text-brand-800',
@@ -51,6 +52,11 @@ function UserStatusBadge({ active }: { active: boolean }) {
       {active ? 'Active' : 'Inactive'}
     </span>
   )
+}
+
+/** Locked-out is a login-time state derived from failedLoginCount/lockedUntil (login lockout fix, 2026-09-01) — distinct from active/inactive. */
+function isLockedOut(user: User): boolean {
+  return !!user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now()
 }
 
 /** Count with a native tooltip listing every phase label — cheap, accessible, no extra UI dependency. */
@@ -94,15 +100,30 @@ function PhaseCheckboxes({ value, onChange, error }: { value: PhaseKey[]; onChan
   )
 }
 
+function formatLastLogin(value: string | undefined): string {
+  if (!value) return 'Never'
+  return new Date(value).toLocaleString()
+}
+
 export function UsersPage() {
   const [showNewForm, setShowNewForm] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [pendingStatusChange, setPendingStatusChange] = useState<{ user: User; nextActive: boolean } | null>(null)
-  const [pendingDelete, setPendingDelete] = useState<User | null>(null)
+  const [pendingDeactivate, setPendingDeactivate] = useState<User | null>(null)
   const { data: users, isLoading, error, refetch } = useUsers()
   const { showToast } = useToast()
   const setStatus = useSetUserStatus()
   const softDelete = useSoftDeleteUser()
+  const resetLockout = useResetLockout()
+
+  const handleClearLockout = async (user: User) => {
+    try {
+      await resetLockout.mutateAsync({ id: user.id })
+      showToast('Lockout cleared.', 'success')
+    } catch (err) {
+      showToast(toFriendlyMessage(err), 'error')
+    }
+  }
 
   const confirmStatusChange = async () => {
     if (!pendingStatusChange) return
@@ -116,13 +137,13 @@ export function UsersPage() {
     }
   }
 
-  const confirmDelete = async () => {
-    if (!pendingDelete) return
-    const user = pendingDelete
-    setPendingDelete(null)
+  const confirmDeactivate = async () => {
+    if (!pendingDeactivate) return
+    const user = pendingDeactivate
+    setPendingDeactivate(null)
     try {
       await softDelete.mutateAsync({ id: user.id })
-      showToast('User deleted.', 'success')
+      showToast('User deactivated.', 'success')
     } catch (err) {
       showToast(toFriendlyMessage(err), 'error')
     }
@@ -131,9 +152,24 @@ export function UsersPage() {
   const columns: DataTableColumn<User>[] = [
     { key: 'name', header: 'Name', render: (u) => u.name ?? '—', isPrimary: true },
     { key: 'email', header: 'Email', render: (u) => u.email },
+    { key: 'mobile', header: 'Mobile', render: (u) => u.mobile ?? '—' },
     { key: 'role', header: 'Role', render: (u) => ROLE_LABELS[u.role] },
     { key: 'phases', header: 'Phases', render: (u) => <PhasesCell phases={u.phases} /> },
-    { key: 'status', header: 'Status', render: (u) => <UserStatusBadge active={u.active} /> },
+    { key: 'lastLogin', header: 'Last login', render: (u) => <span className="text-sm text-gray-600">{formatLastLogin(u.lastLoginAt)}</span> },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (u) => (
+        <div className="flex items-center gap-2">
+          <UserStatusBadge active={u.active} />
+          {isLockedOut(u) && (
+            <span className="inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-800" title={`Locked until ${new Date(u.lockedUntil!).toLocaleString()}`}>
+              Locked
+            </span>
+          )}
+        </div>
+      ),
+    },
     {
       key: 'actions',
       header: 'Actions',
@@ -147,8 +183,13 @@ export function UsersPage() {
             onChange={(nextActive) => setPendingStatusChange({ user: u, nextActive })}
             label={`Toggle active status for ${u.name ?? u.email}`}
           />
-          <button type="button" onClick={() => setPendingDelete(u)} className="text-sm font-medium text-red-700 underline">
-            Delete
+          {isLockedOut(u) && (
+            <button type="button" onClick={() => handleClearLockout(u)} className="text-sm font-medium text-brand-700 underline">
+              Clear lockout
+            </button>
+          )}
+          <button type="button" onClick={() => setPendingDeactivate(u)} className="text-sm font-medium text-red-700 underline">
+            Deactivate
           </button>
         </div>
       ),
@@ -159,7 +200,7 @@ export function UsersPage() {
     <>
       <PageHeader
         title="Users"
-        description="Accounts are created by an Admin only — there is no self-signup. Roles are display labels; screen access is controlled by assigned phases."
+        description="Accounts are created by an Admin or a Users-phase holder — there is no self-signup. Roles are display labels; screen access is controlled by assigned phases."
         actions={
           <button
             type="button"
@@ -172,7 +213,7 @@ export function UsersPage() {
       />
 
       {showNewForm && <NewUserForm onDone={() => setShowNewForm(false)} />}
-      {editingUser && <EditPhasesForm user={editingUser} onDone={() => setEditingUser(null)} />}
+      {editingUser && <EditUserForm user={editingUser} onDone={() => setEditingUser(null)} />}
 
       <SectionCard title="All users">
         {isLoading && <LoadingState rows={4} />}
@@ -196,13 +237,13 @@ export function UsersPage() {
       />
 
       <ConfirmationDialog
-        open={!!pendingDelete}
-        title="Delete this user?"
-        description="This will disable login but keep their history."
-        confirmLabel="Delete"
+        open={!!pendingDeactivate}
+        title="Deactivate this user?"
+        description="This will disable login but keep their history — no account is ever deleted."
+        confirmLabel="Deactivate"
         destructive
-        onConfirm={confirmDelete}
-        onCancel={() => setPendingDelete(null)}
+        onConfirm={confirmDeactivate}
+        onCancel={() => setPendingDeactivate(null)}
       />
     </>
   )
@@ -245,11 +286,14 @@ function NewUserForm({ onDone }: { onDone: () => void }) {
           <FormField label="Full name" htmlFor="name" required error={errors.name?.message}>
             <TextInput id="name" hasError={!!errors.name} {...register('name')} />
           </FormField>
+          <FormField label="Mobile number" htmlFor="mobile" required error={errors.mobile?.message}>
+            <TextInput id="mobile" hasError={!!errors.mobile} {...register('mobile')} />
+          </FormField>
           <FormField label="Email (used as username)" htmlFor="email" required error={errors.email?.message}>
             <TextInput id="email" hasError={!!errors.email} {...register('email')} />
           </FormField>
-          <FormField label="Temporary password" htmlFor="temporaryPassword" required error={errors.temporaryPassword?.message}>
-            <TextInput id="temporaryPassword" hasError={!!errors.temporaryPassword} {...register('temporaryPassword')} />
+          <FormField label="Temporary password" htmlFor="temporaryPassword" required error={errors.temporaryPassword?.message} hint="At least 12 characters. Permanent until an admin changes it — the user is never forced to change it at next login.">
+            <TextInput id="temporaryPassword" type="password" hasError={!!errors.temporaryPassword} {...register('temporaryPassword')} />
           </FormField>
           <FormField label="Role" htmlFor="role" required error={errors.role?.message}>
             <Select id="role" hasError={!!errors.role} placeholder="Select role" options={ROLE_OPTIONS} {...register('role')} />
@@ -273,30 +317,50 @@ function NewUserForm({ onDone }: { onDone: () => void }) {
 }
 
 /**
- * Editing an existing user only changes phases — there is no update-role
- * endpoint (role is fixed at creation, per `UpdateUserPhasesInput` having no
- * role field). Role is still shown here, read-only, for context.
+ * Full edit — name, mobile, email, password, and phases, replacing the
+ * former phases-only form (2026-09-01). Role is shown read-only: it's
+ * still editable server-side (UserUpdate.role exists), but this screen
+ * doesn't expose changing it — promoting someone to Admin is deliberately
+ * not a checkbox next to their name.
+ *
+ * Backend enforcement (app/services/user_admin_guard.py) is the real
+ * boundary — a Users-phase holder who isn't an Admin will get a 404 for
+ * an Admin target (never reaches this form, since Admin rows aren't in
+ * the list) or a 403 if they submit phases changes on themselves. This
+ * form doesn't try to replicate that logic; it just surfaces whatever
+ * the API says went wrong.
  */
-function EditPhasesForm({ user, onDone }: { user: User; onDone: () => void }) {
+function EditUserForm({ user, onDone }: { user: User; onDone: () => void }) {
   const { showToast } = useToast()
-  const updatePhases = useUpdateUserPhases()
+  const updateUser = useUpdateUser()
 
   const {
+    register,
     handleSubmit,
     watch,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<UpdateUserPhasesFormValues>({
-    resolver: zodResolver(updateUserPhasesSchema),
-    defaultValues: { phases: user.phases },
+  } = useForm<UpdateUserFormValues>({
+    resolver: zodResolver(updateUserSchema),
+    defaultValues: { name: user.name ?? '', mobile: user.mobile ?? '', email: user.email, password: '', phases: user.phases },
   })
 
   const phases = watch('phases')
 
-  const onSubmit = async (values: UpdateUserPhasesFormValues) => {
+  const onSubmit = async (values: UpdateUserFormValues) => {
     try {
-      await updatePhases.mutateAsync({ id: user.id, phases: values.phases })
-      showToast('Phases updated.', 'success')
+      await updateUser.mutateAsync({
+        id: user.id,
+        name: values.name,
+        mobile: values.mobile,
+        email: values.email,
+        phases: values.phases,
+        // Blank password field means "leave unchanged" — never send an
+        // empty string, the backend would reject it against the 12-char
+        // minimum, and it isn't the caller's intent anyway.
+        password: values.password === '' ? undefined : values.password,
+      })
+      showToast('User updated.', 'success')
       onDone()
     } catch (error) {
       showToast(toFriendlyMessage(error), 'error')
@@ -304,11 +368,25 @@ function EditPhasesForm({ user, onDone }: { user: User; onDone: () => void }) {
   }
 
   return (
-    <SectionCard title={`Edit phases — ${user.name ?? user.email}`}>
+    <SectionCard title={`Edit user — ${user.name ?? user.email}`}>
       <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)} noValidate>
-        <FormField label="Role" htmlFor="editRole" hint="Role is set when the account is created and can't be changed here.">
-          <TextInput id="editRole" value={ROLE_LABELS[user.role]} disabled readOnly />
-        </FormField>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormField label="Full name" htmlFor="editName" required error={errors.name?.message}>
+            <TextInput id="editName" hasError={!!errors.name} {...register('name')} />
+          </FormField>
+          <FormField label="Mobile number" htmlFor="editMobile" required error={errors.mobile?.message}>
+            <TextInput id="editMobile" hasError={!!errors.mobile} {...register('mobile')} />
+          </FormField>
+          <FormField label="Email (used as username)" htmlFor="editEmail" required error={errors.email?.message}>
+            <TextInput id="editEmail" hasError={!!errors.email} {...register('email')} />
+          </FormField>
+          <FormField label="Role" htmlFor="editRole" hint="Role is a display label only and isn't changed here — screen access comes from phases below.">
+            <TextInput id="editRole" value={ROLE_LABELS[user.role]} disabled readOnly />
+          </FormField>
+          <FormField label="New password" htmlFor="editPassword" error={errors.password?.message} hint="Leave blank to keep the current password. Setting a new one signs the user out everywhere immediately.">
+            <TextInput id="editPassword" type="password" hasError={!!errors.password} placeholder="Unchanged" {...register('password')} />
+          </FormField>
+        </div>
 
         <FormField label="Phases" htmlFor="editPhases" required error={errors.phases?.message}>
           <PhaseCheckboxes value={phases ?? []} onChange={(next) => setValue('phases', next, { shouldValidate: true })} />
@@ -320,7 +398,7 @@ function EditPhasesForm({ user, onDone }: { user: User; onDone: () => void }) {
             disabled={isSubmitting}
             className="min-h-11 rounded-lg bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60"
           >
-            {isSubmitting ? 'Saving...' : 'Save phases'}
+            {isSubmitting ? 'Saving...' : 'Save changes'}
           </button>
           <button
             type="button"

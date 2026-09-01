@@ -11,6 +11,19 @@ GET   /registrations/{id}             — full pipeline detail for one plot+seas
 POST  /registrations/{id}/field-qc    — record inspection (gate: Registered or
                                         Field QC Failed for follow-ups, R17)
 GET   /registrations/{id}/field-qc    — inspection history (failed rows kept, R16)
+
+Reads: /plots, /plots/{id}, /registrations, /registrations/{id} are
+cross-cutting reference data — harvests, packaging, lab_samples,
+contracts, palletisation, and arrival_qc all join against them for
+plot/registration context (CLAUDE.md §4.1). Gated to any assigned phase
+(require_any_phase) rather than an allowlist naming most of the 13
+operational phases. /registrations/{id}/field-qc is narrower — read only
+by plot detail (plot_registration) and packaging (packaging) — so it
+keeps a specific require_phase set.
+
+Writes are gated on plot_registration (Step 3 conversion, 2026-09-01),
+replacing require_role(FIELD_WORKER) — role is no longer checked anywhere
+in this file.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -18,8 +31,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.core.deps import get_current_user, require_role
-from app.core.enums import RegistrationStatus, UserRole
+from app.core.deps import require_any_phase, require_phase
+from app.core.enums import PhaseKey, RegistrationStatus
 from app.models.farmer import Farmer
 from app.models.plot import FieldQC, Plot, SeasonRegistration
 from app.models.user import User
@@ -36,13 +49,15 @@ from app.services import status_machine
 
 router = APIRouter()
 
-_field_worker = Depends(require_role(UserRole.FIELD_WORKER))
+_plot_registration = Depends(require_phase(PhaseKey.PLOT_REGISTRATION))
+_any_phase = Depends(require_any_phase())
+_field_qc_read_phases = Depends(require_phase(PhaseKey.PLOT_REGISTRATION, PhaseKey.PACKAGING))
 
 
 # ---------------------------------------------------------------- Plots
 @router.post(
     "/plots", response_model=PlotRead, status_code=status.HTTP_201_CREATED,
-    dependencies=[_field_worker],
+    dependencies=[_plot_registration],
 )
 def create_plot(body: PlotCreate, db: Session = Depends(get_db)):
     farmer = db.get(Farmer, body.farmer_id)
@@ -74,7 +89,7 @@ def create_plot(body: PlotCreate, db: Session = Depends(get_db)):
     return plot
 
 
-@router.patch("/plots/{plot_id}", response_model=PlotRead, dependencies=[_field_worker])
+@router.patch("/plots/{plot_id}", response_model=PlotRead, dependencies=[_plot_registration])
 def update_plot(plot_id: int, body: PlotUpdate, db: Session = Depends(get_db)):
     plot = db.get(Plot, plot_id)
     if plot is None:
@@ -109,11 +124,10 @@ def update_plot(plot_id: int, body: PlotUpdate, db: Session = Depends(get_db)):
     return plot
 
 
-@router.get("/plots", response_model=list[PlotRead])
+@router.get("/plots", response_model=list[PlotRead], dependencies=[_any_phase])
 def list_plots(
     farmer_id: int | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     stmt = select(Plot).order_by(Plot.farmer_id, Plot.plot_number)
     if farmer_id is not None:
@@ -121,11 +135,10 @@ def list_plots(
     return list(db.scalars(stmt))
 
 
-@router.get("/plots/{plot_id}", response_model=PlotRead)
+@router.get("/plots/{plot_id}", response_model=PlotRead, dependencies=[_any_phase])
 def get_plot(
     plot_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     plot = db.get(Plot, plot_id)
     if plot is None:
@@ -143,7 +156,7 @@ def register_plot_for_season(
     plot_id: int,
     body: SeasonRegistrationCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(UserRole.FIELD_WORKER)),
+    user: User = Depends(require_phase(PhaseKey.PLOT_REGISTRATION)),
 ):
     plot = db.get(Plot, plot_id)
     if plot is None:
@@ -173,12 +186,11 @@ def register_plot_for_season(
     return reg
 
 
-@router.get("/registrations", response_model=list[SeasonRegistrationRead])
+@router.get("/registrations", response_model=list[SeasonRegistrationRead], dependencies=[_any_phase])
 def list_registrations(
     status_filter: RegistrationStatus | None = Query(default=None, alias="status"),
     season_year: int | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     stmt = select(SeasonRegistration).order_by(SeasonRegistration.id.desc())
     if status_filter is not None:
@@ -195,11 +207,10 @@ def get_registration_or_404(reg_id: int, db: Session) -> SeasonRegistration:
     return reg
 
 
-@router.get("/registrations/{reg_id}", response_model=SeasonRegistrationRead)
+@router.get("/registrations/{reg_id}", response_model=SeasonRegistrationRead, dependencies=[_any_phase])
 def get_registration(
     reg_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     return get_registration_or_404(reg_id, db)
 
@@ -214,7 +225,7 @@ def record_field_qc(
     reg_id: int,
     body: FieldQCCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(UserRole.FIELD_WORKER)),
+    user: User = Depends(require_phase(PhaseKey.PLOT_REGISTRATION)),
 ):
     reg = get_registration_or_404(reg_id, db)
     status_machine.can_record_field_qc(reg)
@@ -231,11 +242,10 @@ def record_field_qc(
     return qc
 
 
-@router.get("/registrations/{reg_id}/field-qc", response_model=list[FieldQCRead])
+@router.get("/registrations/{reg_id}/field-qc", response_model=list[FieldQCRead], dependencies=[_field_qc_read_phases])
 def field_qc_history(
     reg_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     get_registration_or_404(reg_id, db)
     return list(

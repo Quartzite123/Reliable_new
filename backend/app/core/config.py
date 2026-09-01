@@ -13,6 +13,21 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # CORS allowlist — comma-separated origins, no wildcard (2026-09-01
+    # security audit fix #5). Previously allow_origins=["*"] +
+    # allow_credentials=True, which Starlette's CORSMiddleware resolves by
+    # echoing back whatever Origin the request sent (verified live with a
+    # forged Origin header) rather than a literal "*" — any site could get
+    # a credentialed response. Defaults to the local Vite dev port only;
+    # set FRONTEND_ORIGINS in production to the deployed frontend's exact
+    # origin(s) (e.g. the Vercel URL), comma-separated if there's more than
+    # one (production + preview deployments).
+    FRONTEND_ORIGINS: str = "http://localhost:5173"
+
+    @property
+    def frontend_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.FRONTEND_ORIGINS.split(",") if origin.strip()]
+
     # Cloudinary — file uploads (passbook photos, lab seal photos/documents,
     # weighing slip photos). Required: Render's filesystem is ephemeral, so
     # local disk storage doesn't survive a restart. Never hardcode these.

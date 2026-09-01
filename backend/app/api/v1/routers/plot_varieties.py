@@ -4,6 +4,10 @@ Plot Varieties — CRUD for per-plot variety registrations (R57).
 A plot can hold multiple grape varieties; each variety runs its own
 independent pipeline (season_registration → Field QC → Lab → Contract →
 Harvest). These endpoints let workers manage the variety list for a plot.
+
+All three endpoints are scoped to plot_registration — variety management
+is part of plot setup. Previously ungated (auth-only) entirely, including
+the DELETE, which is destructive.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,25 +15,27 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.core.deps import get_current_user
+from app.core.deps import require_phase
+from app.core.enums import PhaseKey
 from app.models.plot import Plot
 from app.models.plot_variety import PlotVariety
-from app.models.user import User
 from app.schemas.plot_variety import PlotVarietyCreate, PlotVarietyRead
 
 router = APIRouter()
+
+_plot_registration = Depends(require_phase(PhaseKey.PLOT_REGISTRATION))
 
 
 @router.post(
     "/plots/{plot_id}/varieties",
     response_model=PlotVarietyRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[_plot_registration],
 )
 def add_variety(
     plot_id: int,
     body: PlotVarietyCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     plot = db.get(Plot, plot_id)
     if plot is None:
@@ -55,11 +61,10 @@ def add_variety(
     return pv
 
 
-@router.get("/plots/{plot_id}/varieties", response_model=list[PlotVarietyRead])
+@router.get("/plots/{plot_id}/varieties", response_model=list[PlotVarietyRead], dependencies=[_plot_registration])
 def list_varieties(
     plot_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     plot = db.get(Plot, plot_id)
     if plot is None:
@@ -76,11 +81,11 @@ def list_varieties(
 @router.delete(
     "/plot-varieties/{variety_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[_plot_registration],
 )
 def remove_variety(
     variety_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     pv = db.get(PlotVariety, variety_id)
     if pv is None:

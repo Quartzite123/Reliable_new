@@ -6,11 +6,6 @@ export const loginSchema = z.object({
 })
 export type LoginFormValues = z.infer<typeof loginSchema>
 
-export const forgotPasswordSchema = z.object({
-  email: z.string().min(1, 'Enter your email.').email('Enter a valid email address.'),
-})
-export type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>
-
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, 'Enter your current password.'),

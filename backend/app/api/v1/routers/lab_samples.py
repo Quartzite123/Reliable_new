@@ -7,6 +7,14 @@ POST /lab-samples/{id}/seal-photo            — photo upload
 POST /lab-samples/{id}/documents             — 2A/4B PDF upload
 GET  /lab-samples/queue                      — pending work for lab workers
 GET  /registrations/{id}/lab-sample          — read
+
+Read (registration-scoped, GET /registrations/{id}/lab-sample) is scoped
+to {lab_sampling, packaging} — lab_samples' own screens plus packaging,
+which pulls lab-sample context onto its own rows (features/packaging/
+api.ts). Everything else in this file (the queue, the writes) is gated on
+lab_sampling alone (Step 3 conversion, 2026-09-01), replacing
+require_role(LAB_WORKER) — role is no longer checked anywhere in this
+file.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
@@ -14,8 +22,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.core.deps import get_current_user, require_role
-from app.core.enums import RegistrationStatus, UserRole
+from app.core.deps import require_phase
+from app.core.enums import PhaseKey, RegistrationStatus
 from app.models.lab import LabSample
 from app.models.plot import SeasonRegistration
 from app.models.user import User
@@ -27,10 +35,11 @@ from app.utils.file_upload import save_upload
 
 router = APIRouter()
 
-_lab_worker = Depends(require_role(UserRole.LAB_WORKER))
+_lab_sampling = Depends(require_phase(PhaseKey.LAB_SAMPLING))
+_lab_sample_read_phases = Depends(require_phase(PhaseKey.LAB_SAMPLING, PhaseKey.PACKAGING))
 
 
-@router.get("/lab-samples/queue", response_model=list[SeasonRegistrationRead], dependencies=[_lab_worker])
+@router.get("/lab-samples/queue", response_model=list[SeasonRegistrationRead], dependencies=[_lab_sampling])
 def lab_queue(db: Session = Depends(get_db)):
     return list(
         db.scalars(
@@ -50,7 +59,7 @@ def record_lab_sample(
     reg_id: int,
     body: LabSampleCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(UserRole.LAB_WORKER)),
+    user: User = Depends(require_phase(PhaseKey.LAB_SAMPLING)),
 ):
     reg = get_registration_or_404(reg_id, db)
     status_machine.can_record_lab_sample(reg)
@@ -67,11 +76,10 @@ def record_lab_sample(
     return sample
 
 
-@router.get("/registrations/{reg_id}/lab-sample", response_model=LabSampleRead)
+@router.get("/registrations/{reg_id}/lab-sample", response_model=LabSampleRead, dependencies=[_lab_sample_read_phases])
 def read_lab_sample(
     reg_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     reg = get_registration_or_404(reg_id, db)
     if reg.lab_sample is None:
@@ -86,7 +94,7 @@ def _get_sample_or_404(sample_id: int, db: Session) -> LabSample:
     return sample
 
 
-@router.post("/lab-samples/{sample_id}/seal-photo", response_model=LabSampleRead, dependencies=[_lab_worker])
+@router.post("/lab-samples/{sample_id}/seal-photo", response_model=LabSampleRead, dependencies=[_lab_sampling])
 def upload_seal_photo(sample_id: int, file: UploadFile, db: Session = Depends(get_db)):
     sample = _get_sample_or_404(sample_id, db)
     sample.seal_photo_url = save_upload(file, "lab-seals")
@@ -95,7 +103,7 @@ def upload_seal_photo(sample_id: int, file: UploadFile, db: Session = Depends(ge
     return sample
 
 
-@router.post("/lab-samples/{sample_id}/documents", response_model=LabSampleRead, dependencies=[_lab_worker])
+@router.post("/lab-samples/{sample_id}/documents", response_model=LabSampleRead, dependencies=[_lab_sampling])
 def upload_documents(sample_id: int, file: UploadFile, db: Session = Depends(get_db)):
     sample = _get_sample_or_404(sample_id, db)
     sample.documents_2a4b_url = save_upload(file, "lab-docs", allow_pdf=True)

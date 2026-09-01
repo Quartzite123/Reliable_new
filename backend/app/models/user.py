@@ -8,10 +8,13 @@ here, one per table that FKs to users.id, so `user.contracts_created` etc.
 works for audit-trail lookups (R30).
 """
 
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import Boolean, Column, DateTime, Enum as SAEnum, Integer, String, func
 from sqlalchemy.orm import relationship
 
 from app.core.enums import UserRole
+from app.core.security import LOGIN_LOCKOUT_MINUTES, MAX_FAILED_LOGIN_ATTEMPTS
 from app.db.base import Base
 
 
@@ -26,6 +29,11 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=True)
+    # Not unique — follows the farmers.mobile precedent (2026-09-01 admin
+    # user-management overhaul). Nullable in the DB the same way `name` is:
+    # existing accounts have no value on file, required going forward via
+    # UserCreate's Pydantic validation instead of a DB constraint.
+    mobile = Column(String, nullable=True)
     password_hash = Column(String, nullable=False)
     role = Column(SAEnum(UserRole, name="user_role", values_callable=_values), nullable=False)
     active = Column(Boolean, nullable=False)
@@ -38,6 +46,15 @@ class User(Base):
     last_activity_at = Column(DateTime, nullable=True)
     failed_login_count = Column(Integer, nullable=False, default=0, server_default="0")
     last_failed_login_at = Column(DateTime, nullable=True)
+
+    # Token revocation (2026-09-01 security audit fix #3): any access or
+    # refresh token whose `iat` predates this is rejected in
+    # get_current_user/get_optional_user and POST /auth/refresh, regardless
+    # of its own exp. Bumped whenever password_hash changes (admin reset or
+    # a future self-service change). server_default=now() on the migration
+    # means every token issued before this column existed was invalidated
+    # at deploy time — expected, one-time, not a bug.
+    password_changed_at = Column(DateTime, nullable=False, server_default=func.now())
 
     # --- audit-trail back-references (R30, R54) ---
     season_registrations_registered = relationship(
@@ -97,3 +114,17 @@ class User(Base):
         frontend's `User.phases: PhaseKey[]` exactly (added 2026-08-23).
         """
         return [pa.phase_key for pa in self.phase_access]
+
+    @property
+    def locked_until(self) -> datetime | None:
+        """
+        None if not currently locked out. Computed, not stored — avoids a
+        second source of truth alongside failed_login_count/
+        last_failed_login_at. Naive-UTC to match every other datetime on
+        this model (see password_changed_at comment above).
+        """
+        if self.failed_login_count < MAX_FAILED_LOGIN_ATTEMPTS or self.last_failed_login_at is None:
+            return None
+        unlock_at = self.last_failed_login_at + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        return unlock_at if unlock_at > now else None

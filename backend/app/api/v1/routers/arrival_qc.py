@@ -13,6 +13,15 @@ Open Questions).
 
 GET /arrival-qc — all records (optionally filtered by harvest_id), newest
                   first. General list view for Field/Office Workers.
+
+Everything in this file — reads and the write — is scoped to the
+arrival_qc phase alone (Step 3 conversion, 2026-09-01), replacing
+require_role(FIELD_WORKER)/FIELD_WORKER+OFFICE_WORKER. Role is no longer
+checked anywhere in this file. This was held back until the live
+user_phase_access data was corrected: fieldworker didn't hold arrival_qc
+and labworker incorrectly did (CLAUDE.md §6 says Field Worker owns
+Arrival QC) — fixed via a one-off SQL grant/revoke on 2026-09-01, verified
+before this conversion was applied.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,8 +29,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.core.deps import get_current_user, require_role
-from app.core.enums import UserRole
+from app.core.deps import require_phase
+from app.core.enums import PhaseKey
 from app.models.arrival_qc import ArrivalQC
 from app.models.harvest import Harvest
 from app.models.user import User
@@ -30,7 +39,7 @@ from app.services import status_machine
 
 router = APIRouter()
 
-_field_or_office = Depends(require_role(UserRole.FIELD_WORKER, UserRole.OFFICE_WORKER))
+_arrival_qc_phase = Depends(require_phase(PhaseKey.ARRIVAL_QC))
 
 
 def _get_harvest_or_404(harvest_id: int, db: Session) -> Harvest:
@@ -40,7 +49,7 @@ def _get_harvest_or_404(harvest_id: int, db: Session) -> Harvest:
     return harvest
 
 
-@router.get("/arrival-qc", response_model=list[ArrivalQCRead], dependencies=[_field_or_office])
+@router.get("/arrival-qc", response_model=list[ArrivalQCRead], dependencies=[_arrival_qc_phase])
 def list_arrival_qc(
     harvest_id: int | None = None,
     db: Session = Depends(get_db),
@@ -60,7 +69,7 @@ def record_arrival_qc(
     harvest_id: int,
     body: ArrivalQCCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(UserRole.FIELD_WORKER)),
+    user: User = Depends(require_phase(PhaseKey.ARRIVAL_QC)),
 ):
     harvest = _get_harvest_or_404(harvest_id, db)
     if harvest.arrival_qc is not None:
@@ -93,10 +102,8 @@ def record_arrival_qc(
     return qc
 
 
-@router.get("/harvests/{harvest_id}/arrival-qc", response_model=ArrivalQCRead)
-def read_arrival_qc(
-    harvest_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)
-):
+@router.get("/harvests/{harvest_id}/arrival-qc", response_model=ArrivalQCRead, dependencies=[_arrival_qc_phase])
+def read_arrival_qc(harvest_id: int, db: Session = Depends(get_db)):
     harvest = _get_harvest_or_404(harvest_id, db)
     if harvest.arrival_qc is None:
         raise HTTPException(status_code=404, detail="No Arrival QC recorded for this harvest")

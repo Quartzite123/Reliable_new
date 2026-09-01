@@ -3,7 +3,17 @@ import { mockDelay } from '@/api/mockDelay'
 import { recordAuditEvent } from '@/features/auditLog'
 import type { EntityId, User } from '@/types/common'
 import { allocateUserId, usersStore } from './mockStore'
-import type { CreateUserInput, SetUserStatusInput, SoftDeleteUserInput, UpdateUserPhasesInput } from './types'
+import type { CreateUserInput, ResetLockoutInput, SetUserStatusInput, SoftDeleteUserInput, UpdateUserInput } from './types'
+
+/**
+ * The mock store does not replicate app/services/user_admin_guard.py's
+ * rules (self-phase-edit block, admin-target protection, users-phase
+ * grant block, admin-phase immutability) — those are the real security
+ * boundary and are backend-only by design (2026-09-01: "Enforce all of
+ * these on the BACKEND, not just by hiding UI"). This mock is for
+ * offline UI development, not a second copy of the boundary to keep in
+ * sync.
+ */
 
 function toPublicUser({ password: _password, ...user }: (typeof usersStore)[number]): User {
   return user
@@ -33,10 +43,12 @@ export const usersApiMock = {
     const user = {
       id: allocateUserId(),
       name: input.name,
+      mobile: input.mobile,
       email: input.email,
       role: input.role,
       active: true,
       phases: input.phases,
+      failedLoginCount: 0,
       password: input.temporaryPassword,
     }
     usersStore.push(user)
@@ -44,11 +56,21 @@ export const usersApiMock = {
     return toPublicUser(user)
   },
 
-  async updatePhases(input: UpdateUserPhasesInput): Promise<User> {
+  /** Full edit — name/mobile/email/phases always sent; password only when the admin typed a new one. */
+  async update({ id, ...changes }: UpdateUserInput): Promise<User> {
     await mockDelay(300)
-    const user = findUserOrThrow(input.id)
-    user.phases = input.phases
-    recordAuditEvent({ action: 'User phases changed', module: 'Users', result: 'success', recordRef: user.email })
+    const user = findUserOrThrow(id)
+    if (changes.name !== undefined) user.name = changes.name
+    if (changes.mobile !== undefined) user.mobile = changes.mobile
+    if (changes.email !== undefined) user.email = changes.email
+    if (changes.phases !== undefined) user.phases = changes.phases
+    if (changes.password !== undefined) {
+      user.password = changes.password
+      recordAuditEvent({ action: 'Password reset', module: 'Users', result: 'success', recordRef: user.email })
+    }
+    if (changes.phases !== undefined) {
+      recordAuditEvent({ action: 'User phases changed', module: 'Users', result: 'success', recordRef: user.email })
+    }
     return toPublicUser(user)
   },
 
@@ -70,11 +92,11 @@ export const usersApiMock = {
   },
 
   /**
-   * Marks the user deleted without ever removing the record (CLAUDE.md
-   * §12 — no hard deletes). Our `User` type has no separate "deleted" state
-   * distinct from `active: boolean`, so a soft delete is mechanically the
-   * same as deactivating; the audit log is what preserves "this was a
-   * delete" as a distinct fact from "this was a deactivation."
+   * "Delete" only ever deactivated (CLAUDE.md §12 — no hard deletes);
+   * mechanically identical to setStatus(false). Kept as a separate method
+   * because it's a separate user-facing action (2026-09-01: renamed
+   * Delete -> Deactivate in the UI, but kept as its own affordance
+   * alongside the status toggle rather than merged into it).
    */
   async softDelete(input: SoftDeleteUserInput): Promise<User> {
     await mockDelay(300)
@@ -82,13 +104,21 @@ export const usersApiMock = {
     const oldStatus = user.active ? 'active' : 'inactive'
     user.active = false
     recordAuditEvent({
-      action: 'User deleted',
+      action: 'User deactivated',
       module: 'Users',
       result: 'success',
       recordRef: user.email,
       oldStatus,
-      newStatus: 'deleted',
+      newStatus: 'inactive',
     })
+    return toPublicUser(user)
+  },
+
+  /** No lockout simulation in the mock store — every mock user starts unlocked, so this is a no-op that just returns the user. */
+  async resetLockout(input: ResetLockoutInput): Promise<User> {
+    await mockDelay(300)
+    const user = findUserOrThrow(input.id)
+    recordAuditEvent({ action: 'Login lockout cleared', module: 'Users', result: 'success', recordRef: user.email })
     return toPublicUser(user)
   },
 }

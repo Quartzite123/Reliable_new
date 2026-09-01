@@ -26,6 +26,10 @@ export type PhaseKey =
   | 'pre_cooling'
   | 'finished_goods_qc'
   | 'admin'
+  /** Added 2026-09-01 — user management, split out of 'admin'. See app/services/user_admin_guard.py on the backend for the actual security boundary (this phase alone isn't the whole story). */
+  | 'users'
+  /** Added 2026-09-01 — placeholder, same pattern as 'finished_goods_qc'. Gates the not-yet-built Reports and Export Documents modules; gates nothing today. */
+  | 'reports_documents'
 
 /**
  * Generic lifecycle status used across QC, contracts, harvest, etc.
@@ -47,11 +51,18 @@ export interface User {
   id: EntityId
   /** Nullable on the backend (UserRead.name) — some accounts may not have one set. */
   name?: string
+  /** Nullable on the backend (existing accounts predate this field) — required going forward for new accounts (2026-09-01). Not unique — matches Farmer.mobile. */
+  mobile?: string
   email: string
   role: Role
   active: boolean
   /** Screens this user can see — the actual access-control mechanism. `role` above is a display label only. */
   phases: PhaseKey[]
+  lastLoginAt?: string
+  /** Optional so mock data (features/users/mockStore.ts) doesn't need updating for every seed row — treat missing as 0. */
+  failedLoginCount?: number
+  /** Non-null and in the future = currently locked out (login lockout fix, 2026-09-01). */
+  lockedUntil?: string
 }
 
 /** Opaque internal database id — backend ids are integers (verified via openapi.json: every *Read schema's `id` is `integer`). */

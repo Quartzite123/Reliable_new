@@ -1,6 +1,6 @@
 import { httpClient } from '@/api/httpClient'
 import type { User } from '@/types/common'
-import type { AuthSession, AuthTokens, ChangePasswordInput, ForgotPasswordInput, LoginCredentials } from './types'
+import type { AuthSession, AuthTokens, ChangePasswordInput, LoginCredentials } from './types'
 
 /**
  * Real backend implementation — swapped in via USE_MOCK_API.
@@ -36,22 +36,19 @@ export const authApiReal = {
   logout: () => httpClient.post<void>('/auth/logout'),
 
   /**
-   * No `/auth/change-password` or `/auth/forgot-password` endpoint exists on
-   * the real backend (verified via generated openapi.json — the only /auth
-   * routes are login, refresh, logout). Rather than silently calling a
-   * nonexistent path and letting it 404 unpredictably, these fail loudly and
-   * explicitly so the UI can show something meaningful. Kept as methods
-   * (rather than removed) so `authApi`'s real/mock shapes stay identical —
-   * see api.mock.ts and the pages that call these.
+   * No `/auth/change-password` endpoint exists on the real backend
+   * (verified via generated openapi.json — the only /auth routes are
+   * login, refresh, logout). Rather than silently calling a nonexistent
+   * path and letting it 404 unpredictably, this fails loudly and
+   * explicitly so the UI can show something meaningful. Kept as a method
+   * (rather than removed) so `authApi`'s real/mock shapes stay identical
+   * — see api.mock.ts and ChangePasswordPage, which calls this. (There is
+   * no forgotPassword — no self-service reset exists at all, 2026-09-01;
+   * admin-set passwords are permanent, recovery is scripts/seed_admin.py.)
    */
   changePassword(_input: ChangePasswordInput): Promise<void> {
     return Promise.reject(
       new Error('Change password is not available yet — this endpoint does not exist on the backend.'),
-    )
-  },
-  forgotPassword(_input: ForgotPasswordInput): Promise<void> {
-    return Promise.reject(
-      new Error('Forgot password is not available yet — this endpoint does not exist on the backend.'),
     )
   },
 }

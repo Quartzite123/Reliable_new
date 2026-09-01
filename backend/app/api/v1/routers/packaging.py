@@ -14,6 +14,17 @@ e.g. RF-P12-20260215-OFD-5KG-1 — unique, human-readable, traceable (R31, R34).
 
 Post-save hook: auto stock-out of per-box materials via stock_movements
 (services/inventory.py) — silent no-op until the BOM is set up.
+
+GET /packaging is scoped to {packaging, palletisation} — palletisation
+reads it to know which lots still have unassigned boxes
+(features/palletisation/api.ts).
+
+The write (POST .../packaging) is gated on packaging alone (Step 3
+conversion, 2026-09-01), replacing require_role(OFFICE_WORKER) — role is
+no longer checked anywhere in this file. Note: stockmanager holds the
+packaging phase in the live seed and can now write packaging records too
+— intentional (2026-09-01 conversation): phase membership is the actual
+grant, not a role-based allowlist underneath it.
 """
 
 from decimal import Decimal
@@ -24,8 +35,8 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.core.constants import FARMER_REJECTION_PCT
-from app.core.deps import get_current_user, require_role
-from app.core.enums import PackSize, UserRole
+from app.core.deps import require_phase
+from app.core.enums import PackSize, PhaseKey
 from app.models.company_settings import CompanySettings
 from app.models.customer import Customer
 from app.models.harvest import Harvest
@@ -36,6 +47,8 @@ from app.services import status_machine
 from app.services.inventory import auto_stock_out_for_packaging
 
 router = APIRouter()
+
+_packaging_read_phases = Depends(require_phase(PhaseKey.PACKAGING, PhaseKey.PALLETISATION))
 
 _PACK_CODE = {
     PackSize.FOUR_KG: "4KG",
@@ -66,7 +79,7 @@ def record_packaging(
     harvest_id: int,
     body: PackagingCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(UserRole.OFFICE_WORKER)),
+    user: User = Depends(require_phase(PhaseKey.PACKAGING)),
 ):
     harvest = db.get(Harvest, harvest_id)
     if harvest is None:
@@ -128,12 +141,11 @@ def record_packaging(
     return record
 
 
-@router.get("/packaging", response_model=list[PackagingRead])
+@router.get("/packaging", response_model=list[PackagingRead], dependencies=[_packaging_read_phases])
 def list_packaging(
     harvest_id: int | None = None,
     customer_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     stmt = select(PackagingRecord).order_by(PackagingRecord.id.desc())
     if harvest_id is not None:
