@@ -1,7 +1,6 @@
 import { ApiError, httpClient } from '@/api/httpClient'
 import type { EntityId } from '@/types/common'
 import type { Customer } from '@/features/customers'
-import type { Contract } from '@/features/contracts'
 import type { Farmer } from '@/features/farmers'
 import type { FieldQc, Plot, SeasonRegistration } from '@/features/plots'
 import type { LabSample } from '@/features/labSamples'
@@ -72,22 +71,19 @@ async function loadAllHarvestsWithContext() {
 
 export const packagingApiReal = {
   async listEligibleHarvests(): Promise<EligibleHarvestForPackaging[]> {
-    const [all, contracts, packaging] = await Promise.all([
+    const [all, packaging] = await Promise.all([
       loadAllHarvestsWithContext(),
-      httpClient.get<Contract[]>('/contracts'),
       httpClient.get<PackagingRecord[]>('/packaging'),
     ])
     const rows: EligibleHarvestForPackaging[] = []
     for (const { harvest, registration, plot, farmer } of all) {
       if (registration.status !== 'Arrival QC Passed' && registration.status !== 'Packed') continue
-      const contract = contracts.find((c) => c.seasonRegistrationId === registration.id)
       rows.push({
         harvestId: harvest.id,
         farmerName: farmer.name,
         plotNumber: plot.plotNumber,
         variety: plot.variety,
         harvestDate: harvest.harvestDate,
-        contractRejectionPercent: contract ? Number(contract.rejectionPercent) : 7,
         packingRunsSoFar: packaging.filter((p) => p.harvestId === harvest.id).length,
       })
     }

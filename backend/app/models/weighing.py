@@ -3,10 +3,12 @@ weighing_records — PHASE_MAP.md Section 7. One per vehicle trip (Discovery 5:
 "Weighing | per Vehicle Trip | each truck weighed separately" — kept as-is;
 see the Phase 6 slip-fields addendum note below for why).
 
-rejection_pct is a snapshot of the contract's rejection_percent at save
-time (not a live reference) — preserves historical accuracy if the
-contract is corrected later. Snapshotting itself is service-layer logic;
-this model just stores the resulting value.
+rejection_pct is the fixed rate actually charged (app/core/constants.py
+FARMER_REJECTION_PCT — founder-confirmed, not read from the contract).
+actual_rejection_pct is the operator's observed figure — recorded for
+reference only, never charged; it does not affect rejection_kg. This
+supersedes an earlier design where rejection_pct snapshotted the
+contract's (then-editable) rejection_percent — see Business_Rules.md R28.
 
 Phase 6 addendum (weighing slip #937): the slip carries several extra
 identifying fields plus a tare/gross/net breakdown. The physical slip can
@@ -35,9 +37,9 @@ class WeighingRecord(Base):
     supervisor_name = Column(String, nullable=True)
     num_crates = Column(Integer, nullable=True)
     total_weight_kg = Column(Numeric, nullable=False)  # post-tare gross weight ("Gross Weight" on the slip)
-    rejection_pct = Column(Numeric, nullable=True)  # contract's rejection_percent, snapshot at save time
-    actual_rejection_pct = Column(Numeric(5, 2), nullable=True)  # operator-entered; defaults to rejection_pct, editable
-    rejection_kg = Column(Numeric, nullable=True)  # calculated: total_weight_kg × MIN(actual, contract) / 100
+    rejection_pct = Column(Numeric, nullable=True)  # fixed rate actually charged (FARMER_REJECTION_PCT)
+    actual_rejection_pct = Column(Numeric(5, 2), nullable=True)  # operator-entered; observed only, never charged
+    rejection_kg = Column(Numeric, nullable=True)  # calculated: total_weight_kg × FARMER_REJECTION_PCT / 100
     net_weight_kg = Column(Numeric, nullable=True)  # calculated: total_weight_kg − rejection_kg
     slip_photo_url = Column(String, nullable=True)  # file upload via device camera
 

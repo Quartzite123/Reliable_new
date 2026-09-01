@@ -2,7 +2,9 @@
 
 > **Purpose:** This is the master context file for the entire project. Any agent, developer, or AI working on this project should read this file FIRST before touching any code or spec. It captures every decision, discovery, assumption, and plan from the Phase 0 discovery sessions, and is kept current as the project moves into build.
 >
-> **Last updated:** 2026-08-11 — CEO confirmation round folded in: Season Management is now a real module (not just a year tag), plots can hold multiple varieties (see same-day follow-up below for where variety actually lives), MH registration number moved back to the farmer level, a new Packaging Supervisor role was added, the Purchase Order module was dropped entirely, Finished Goods QC's position in the pipeline was confirmed, and the inventory-ordering pattern was confirmed. See `Business_Rules.md` R55/R56 and the rewritten R2/R7/R7a/R21, and `Open_Questions.md` Q4 (**resolved**, not reopened — see 2026-08-11 same-day follow-up below), Q11/Q12/Q13 (resolved) for full detail.
+> **Last updated:** 2026-08-31 — founder confirmation folded in: the 7% farmer rejection deduction is a FIXED company-wide constant, not a per-contract negotiated term — reverses Discovery 7 below, and reverses the matching "never hardcode 7%" rule in Section 12. See `Business_Rules.md` R24/R28/R48 (rewritten) for full detail.
+>
+> **Previously:** 2026-08-11 — CEO confirmation round folded in: Season Management is now a real module (not just a year tag), plots can hold multiple varieties (see same-day follow-up below for where variety actually lives), MH registration number moved back to the farmer level, a new Packaging Supervisor role was added, the Purchase Order module was dropped entirely, Finished Goods QC's position in the pipeline was confirmed, and the inventory-ordering pattern was confirmed. See `Business_Rules.md` R55/R56 and the rewritten R2/R7/R7a/R21, and `Open_Questions.md` Q4 (**resolved**, not reopened — see 2026-08-11 same-day follow-up below), Q11/Q12/Q13 (resolved) for full detail.
 >
 > **Same-day follow-up (2026-08-11):** Q4's answer was refined further: variety lives on a new `plot_varieties` table (not on `harvests` as the entry above still literally states — see the corrected Discovery 3 below), each variety gets its own independent pipeline (`Business_Rules.md` R57), permissions became phase-based rather than role-based (`user_phase_access`, R53 rewritten, R58), farmer search was fixed to include MH number (R3), and the Farmer Invoice formula was clarified (R48). **Note:** `Open_Questions.md` itself was not part of this follow-up round and still marks Q4 "REOPENED" rather than "RESOLVED" — flagged as a cross-document inconsistency in the change report; that file needs the same correction next time it's touched.
 >
@@ -70,8 +72,10 @@ Quality checks happen at THREE distinct stages, each recorded independently:
 ### Discovery 6: Bank details belong at registration, not contract
 Bank details (account, IFSC, passbook photo) are a farmer-level permanent fact, not a per-contract fact. Collected during farmer registration (Phase 1B) but not required to create the farmer — only required before a Contract can be created.
 
-### Discovery 7: The 7% rejection is NOT hardcoded
-The Excel references "7% Farmer Rejection" everywhere, but it's actually a **per-contract negotiated term** that defaults to 7%. The system stores it on the Contract and pulls it dynamically for Weighing and Packaging calculations.
+### Discovery 7: The 7% rejection IS a fixed constant (reversed 2026-08-31)
+**Superseded — the discovery below described a per-contract negotiated term. Founder confirmation (2026-08-31) reverses this:** the 7% rejection is a fixed, company-wide constant — not negotiated, not stored per contract, and not read from `contracts.rejection_percent` by any calculation. The farmer is always paid on 93% of net weight, regardless of actual observed rejection (which may be 4%, 9%, or anything else — it makes no difference to payment; there is no MIN() and no farmer/exporter split). The constant lives in `backend/app/core/constants.py` (`FARMER_REJECTION_PCT`), read directly by Weighing and Packaging. Actual observed rejection is still captured (`actual_rejection_pct` on both `weighing_records` and `packaging_records`) as real operational data, but it's informational only. The `contracts.rejection_percent` column still exists in the DB (always defaults to 7.00) — nothing reads it anymore, and the contract creation form no longer asks for it. See `Business_Rules.md` R24/R28/R48 (rewritten 2026-08-31).
+
+*Superseded text, kept for history:* "The Excel references '7% Farmer Rejection' everywhere, but it's actually a per-contract negotiated term that defaults to 7%. The system stores it on the Contract and pulls it dynamically for Weighing and Packaging calculations." — this was the working assumption from Phase 0 discovery through 2026-08-30; it is no longer correct.
 
 ### Discovery 8: MH registration number belongs to the farmer, not the plot (reversed 2026-08-11)
 **MH registration number belongs to the farmer, not the plot. One MH number per farmer.** This matches Reliable Fresh's operational practice. Note: APEDA/NRC Grapes documentation suggests plot-level registration (format: MH[state][district][taluka][product][farm][plot]), and an earlier pass of this document "corrected" the original Excel to plot-level on that basis — but CEO confirmation overrides the documentation research. Follow business practice: `farmers.mh_number` (string, unique, nullable). There is no MH identifier at the plot level. See `Business_Rules.md` R2/R7a.
@@ -272,7 +276,7 @@ Open_Questions.md       — 14 numbered questions; several resolved as of 2026-0
 
 ## 12. Things to NEVER do
 
-- Never hardcode 7% rejection — always pull from the contract
+- ~~Never hardcode 7% rejection — always pull from the contract~~ **REVERSED 2026-08-31:** 7% rejection IS a fixed constant now (founder-confirmed) — read it from `backend/app/core/constants.py::FARMER_REJECTION_PCT`, never from `contracts.rejection_percent` (that column is unread, kept only for the DB record). See Discovery 7 above and `Business_Rules.md` R28.
 - Never delete farmer, plot, or failed QC records — soft delete / status change only
 - Never let a user bypass a gate (e.g. create Contract without Lab Pass) via frontend — backend must enforce
 - Never store area or pruning date on the Farmer table — these belong to Plot. (Variety no longer belongs to Plot either as of 2026-08-11 — see below.)

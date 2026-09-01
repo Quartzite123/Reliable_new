@@ -48,7 +48,6 @@ export const weighingApiMock = {
       harvestDate: context.harvest.harvestDate,
       mhNumber: context.plot.mhRegistrationNumber,
       villageName: context.plot.village,
-      contractRejectionPct: context.contract.rejectionPercent,
     }
   },
 
@@ -86,14 +85,12 @@ export const weighingApiMock = {
     const netFruitWeightKg = Math.round((input.grossWeightKg - tareWeightKg) * 100) / 100
     const total = netFruitWeightKg // "Gross Weight" on the slip = post-tare, pre-rejection
 
-    // Server-computed in the real backend from the contract's rejection_percent
-    // snapshot — mirrored here (CLAUDE.md §9). Farmer liability is capped at
-    // the contract rate; the exporter absorbs any excess actual rejection
-    // (Business_Rules R28) — never hardcode 7%, always read from the contract.
-    const contractPct = Number(context.contract.rejectionPercent)
+    // Fixed 7% deduction, founder-confirmed — not read from the contract,
+    // not compared against actual observed rejection (Business_Rules R28,
+    // rewritten). Mirrors backend app/core/constants.py FARMER_REJECTION_PCT.
+    const FARMER_REJECTION_PCT = 7
     const actualPct = input.actualRejectionPct
-    const appliedPct = Math.min(actualPct, contractPct)
-    const rejectionKg = Math.round(total * (appliedPct / 100) * 100) / 100
+    const rejectionKg = Math.round(total * (FARMER_REJECTION_PCT / 100) * 100) / 100
     const netWeightKg = Math.round((total - rejectionKg) * 100) / 100
 
     const crateMismatch = context.trip.numCrates !== undefined && input.crateCountAtWeighing !== context.trip.numCrates
@@ -106,7 +103,7 @@ export const weighingApiMock = {
       supervisorName: input.supervisorName,
       numCrates: input.crateCountAtWeighing,
       totalWeightKg: total.toFixed(2),
-      rejectionPct: contractPct.toFixed(2),
+      rejectionPct: FARMER_REJECTION_PCT.toFixed(2),
       actualRejectionPct: actualPct.toFixed(2),
       rejectionKg: rejectionKg.toFixed(2),
       netWeightKg: netWeightKg.toFixed(2),

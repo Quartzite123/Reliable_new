@@ -27,6 +27,10 @@ function emptyToUndefined(value: string | undefined): string | undefined {
  * are similarly reshaped: the backend has no single "plot detail" or
  * "register with field QC" endpoint — those are composed client-side from
  * three real endpoints (plots, registrations, field-qc), per prompt Section 5B.
+ *
+ * `getDetail` fetches each registration's field-QC history in parallel via
+ * `Promise.all` rather than awaiting one GET per registration in a for-loop —
+ * never reintroduce a serial per-registration loop here.
  */
 export const plotsApiReal = {
   async listByFarmer(farmerId: EntityId): Promise<PlotSummary[]> {
@@ -62,10 +66,13 @@ export const plotsApiReal = {
       .filter((r) => r.plotId === plotId)
       .sort((a, b) => b.seasonYear - a.seasonYear)
 
-    const fieldQcByRegistration: PlotDetail['fieldQcByRegistration'] = {}
-    for (const reg of registrations) {
-      fieldQcByRegistration[reg.id] = await httpClient.get<FieldQc[]>(`/registrations/${reg.id}/field-qc`)
-    }
+    const entries = await Promise.all(
+      registrations.map(async (reg): Promise<readonly [EntityId, FieldQc[]]> => [
+        reg.id,
+        await httpClient.get<FieldQc[]>(`/registrations/${reg.id}/field-qc`),
+      ]),
+    )
+    const fieldQcByRegistration: PlotDetail['fieldQcByRegistration'] = Object.fromEntries(entries)
 
     return { plot, registrations, fieldQcByRegistration }
   },

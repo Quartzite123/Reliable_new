@@ -11,7 +11,11 @@ export interface Contract extends Timestamped {
   seasonRegistrationId: EntityId
   contractDate?: string
   ratePerKg: string
-  /** Defaults to 7 but is editable per contract — Business_Rules R24. Never hardcode 7 downstream. */
+  /**
+   * Always "7.00" — fixed company-wide, no longer editable per contract
+   * (Business_Rules R24/R28, rewritten). Kept only because the DB column
+   * still exists; not read by weighing/packaging calculations anymore.
+   */
   rejectionPercent: string
   terms?: string
   notes?: string
@@ -28,12 +32,17 @@ export interface ContractPrerequisites {
   seasonYear: number
 }
 
-/** Matches backend ContractCreate — no `terms`/`notes` field exists there (verified via openapi.json); kept client-side only, never sent. */
+/**
+ * Matches backend ContractCreate — no `terms`/`notes` field exists there
+ * (verified via openapi.json); kept client-side only, never sent.
+ * No `rejectionPercent` — it's a fixed 7% applied server-side, not a
+ * contract term (Business_Rules R24/R28, rewritten). The backend still
+ * defaults `rejection_percent` to 7.00 if omitted from the POST body.
+ */
 export interface CreateContractInput {
   seasonRegistrationId: EntityId
   contractDate?: string
   ratePerKg: number
-  rejectionPercent?: number
   terms?: string
   notes?: string
 }

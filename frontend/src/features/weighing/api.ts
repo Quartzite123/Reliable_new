@@ -22,12 +22,12 @@ interface PendingTripApi {
  * One real gap remains, and it's not worked around here: `PendingTripRead`
  * (the only endpoint with farmer/plot context) only lists trips that are
  * NOT yet weighed — once a trip is weighed it drops out of `/weighing/pending`,
- * and no other endpoint attaches farmer name, vehicle number, MH number, or
- * village to an already-weighed record. So against the real API:
- *   - `getContext` can supply mhNumber/villageName/contractRejectionPct only
- *     for a still-pending trip's own context call — it can't, because
- *     `PendingTripRead` doesn't carry those fields either. They come back
- *     `undefined` here; the UI shows "—" rather than inventing data.
+ * and no other endpoint attaches farmer name, vehicle number, or MH number
+ * to an already-weighed record. So against the real API:
+ *   - `getContext` can supply mhNumber/villageName only for a still-pending
+ *     trip's own context call — it can't, because `PendingTripRead` doesn't
+ *     carry those fields either. They come back `undefined` here; the UI
+ *     shows "—" rather than inventing data.
  *   - `list`/`getById` return records with `farmerName`/`vehicleNo` left
  *     `undefined` — the UI falls back to "Vehicle Trip #{id}".
  * Flagged in the final report rather than solved by adding backend routes,
@@ -51,7 +51,6 @@ export const weighingApiReal = {
       // Not available on PendingTripRead — see file docstring.
       mhNumber: undefined,
       villageName: undefined,
-      contractRejectionPct: undefined,
     }
   },
 

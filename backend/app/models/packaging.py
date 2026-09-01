@@ -48,10 +48,10 @@ class PackagingRecord(Base):
     )
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     total_weight_kg = Column(Numeric, nullable=False)
-    rejection_contract_kg = Column(Numeric, nullable=True)  # from contract %
+    rejection_contract_kg = Column(Numeric, nullable=True)  # fixed 7% (FARMER_REJECTION_PCT), not from the contract despite the name
     net_weight_kg = Column(Numeric, nullable=True)  # calculated
-    actual_rejection_kg = Column(Numeric, nullable=True)
-    actual_rejection_pct = Column(Numeric, nullable=True)  # calculated
+    actual_rejection_kg = Column(Numeric, nullable=True)  # observed only, never charged
+    actual_rejection_pct = Column(Numeric, nullable=True)  # calculated from actual_rejection_kg; observed only, never charged
     num_boxes = Column(Integer, nullable=False)
     num_pallets = Column(Integer, nullable=True)
     ggn_number = Column(String, nullable=True)  # copied from company_settings at time of packing

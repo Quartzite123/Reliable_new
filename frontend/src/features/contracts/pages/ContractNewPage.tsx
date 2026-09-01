@@ -6,6 +6,7 @@ import { SectionCard } from '@/components/layout/SectionCard'
 import { EmptyState } from '@/components/data/EmptyState'
 import { LoadingState } from '@/components/data/LoadingState'
 import { ErrorState } from '@/components/data/ErrorState'
+import { Alert } from '@/components/feedback/Alert'
 import { PrerequisitePanel } from '@/components/workflow/PrerequisitePanel'
 import { FormField } from '@/components/forms/FormField'
 import { NumberInput } from '@/components/forms/NumberInput'
@@ -15,7 +16,7 @@ import { useToast } from '@/app/ToastContext'
 import { toFriendlyMessage } from '@/utils/errorMessages'
 import type { EntityId } from '@/types/common'
 import { useContractPrerequisites, useCreateContract, useEligiblePlotsForContract } from '../hooks'
-import { contractSchema, DEFAULT_REJECTION_PERCENT, type ContractFormValues } from '../schema'
+import { contractSchema, type ContractFormValues } from '../schema'
 
 export function ContractNewPage() {
   const navigate = useNavigate()
@@ -83,7 +84,6 @@ function ContractForm({
     formState: { errors, isSubmitting },
   } = useForm<ContractFormValues>({
     resolver: zodResolver(contractSchema),
-    defaultValues: { rejectionPercent: DEFAULT_REJECTION_PERCENT },
   })
 
   if (isLoading) return <LoadingState rows={4} />
@@ -121,26 +121,16 @@ function ContractForm({
 
       {allMet && (
         <SectionCard title="Contract terms">
-          <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+          <Alert variant="info">
+            Rejection is a fixed 7% company-wide — the farmer is always paid on 93% of net weight. It's not set per
+            contract.
+          </Alert>
+          <form className="mt-4 flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)} noValidate>
             <FormField label="Contract date" htmlFor="contractDate" required error={errors.contractDate?.message}>
               <DatePicker id="contractDate" hasError={!!errors.contractDate} {...register('contractDate')} />
             </FormField>
             <FormField label="Rate per kg" htmlFor="ratePerKg" required error={errors.ratePerKg?.message}>
               <NumberInput id="ratePerKg" unit="₹/kg" step="0.01" hasError={!!errors.ratePerKg} {...register('ratePerKg', { valueAsNumber: true })} />
-            </FormField>
-            <FormField
-              label="Rejection percentage"
-              htmlFor="rejectionPercent"
-              required
-              hint="Defaults to 7% — editable per contract. This value is what weighing and packaging will use."
-              error={errors.rejectionPercent?.message}
-            >
-              <NumberInput
-                id="rejectionPercent"
-                unit="%"
-                hasError={!!errors.rejectionPercent}
-                {...register('rejectionPercent', { valueAsNumber: true })}
-              />
             </FormField>
             <FormField label="Terms" htmlFor="terms">
               <Textarea id="terms" {...register('terms')} />

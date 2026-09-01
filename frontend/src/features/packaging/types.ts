@@ -19,7 +19,7 @@ export interface PackagingRecord extends Timestamped {
   complianceType: ComplianceType
   customerId: EntityId
   totalWeightKg: string
-  /** Reference only — contract's rejection_percent applied to totalWeightKg, for comparison against actual. */
+  /** Fixed 7% of totalWeightKg (founder-confirmed, not read from the contract despite the field name — Business_Rules R28). */
   contractRejectionKg?: string
   actualRejectionKg?: string
   actualRejectionPct?: string
@@ -50,7 +50,6 @@ export interface EligibleHarvestForPackaging {
   plotNumber: string
   variety?: GrapeVariety
   harvestDate: string
-  contractRejectionPercent: number
   packingRunsSoFar: number
 }
 

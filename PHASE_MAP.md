@@ -23,9 +23,9 @@ Reliable Fresh Export Management System is an internal PWA for Reliable Fresh, a
 | 1B | Farmer Registration — Bank Details | Fully spec'd | Phase 1–5 draft | `bank_details` | 1A | None |
 | 2 | Plot Registration & Field QC (combined screen) | Fully spec'd | Phase 1–5 draft | `plots`, `plot_varieties` *(added 2026-08-11)*, `season_registrations`, `field_qc` | 1A | ~~#4 (multi-variety plots)~~ **RESOLVED 2026-08-11 — see Section 9; note Open_Questions.md marks Q4 "REOPENED" rather than closed, flagged as an inconsistency in the change report** |
 | 3 | Lab Sampling / MRL Test | Fully spec'd | Phase 1–5 draft | `lab_samples` | 2 (Field QC must pass) | None |
-| 4 | Farmer Contract | Fully spec'd | Phase 1–5 draft | `contracts` | 3 (Lab must pass) + 1B (bank details must exist) | #5 (rejection % default/variance policy) |
+| 4 | Farmer Contract | Fully spec'd | Phase 1–5 draft | `contracts` | 3 (Lab must pass) + 1B (bank details must exist) | ~~#5 (rejection % default/variance policy)~~ **RESOLVED 2026-08-31 — fixed 7%, not a contract term** |
 | 5 | Harvesting | Fully spec'd | Phase 1–5 draft | `harvests`, `vehicle_trips` | 4 (Contract must exist) | #3 (harvest frequency — non-blocking, informational) |
-| 6 | Weighing Record | Fully spec'd | Phase 6–8 draft | `weighing_records` | 5 (vehicle trips exist) | #5 (rejection % feeds this calc) |
+| 6 | Weighing Record | Fully spec'd | Phase 6–8 draft | `weighing_records` | 5 (vehicle trips exist) | ~~#5 (rejection % feeds this calc)~~ **RESOLVED 2026-08-31 — fixed 7%, not from the contract** |
 | 7 | Arrival QC | Fully spec'd | Phase 6–8 draft | `arrival_qc` | 6 (weighing complete) | None |
 | 8 | Packaging | Fully spec'd | Phase 6–8 draft | `packaging_records` | 7 (Arrival QC must pass) | #1 (Lot ID rule), #7 (customer report formats) |
 | 9 (9A/9B/9C) | Inventory Management (Item Master, Stock Management, Dashboard) | Scoped | Phase 9–12 draft | `item_master_materials`, `item_master_products`, `bom_entries`, `stock_movements` | 8 (auto stock-out hooks off packaging_records) | ~~#11 (ordering process)~~ **RESOLVED 2026-08-11 — Pattern C** ; #14 (per-box vs per-container deduction timing) still open |
@@ -311,7 +311,8 @@ Unique constraint: `(plot_id, variety_name)`
 *Note (added 2026-08-11): lab sampling typically happens 5–6 days before the planned harvest date. The system does not enforce this window, but the planned sampling date (`field_qc.planned_sampling_date`) should be displayed prominently on this screen so the worker can plan around it.*
 
 **`contracts`** (Phase 4) — one per registration, only after Lab passes + bank_details exist
-`id` PK · `season_registration_id` FK, unique · `contract_date` date · `rate_per_kg` decimal · `rejection_percent` decimal, default 7.00, editable (R24) · `created_by` FK→users · `created_at`
+`id` PK · `season_registration_id` FK, unique · `contract_date` date · `rate_per_kg` decimal · ~~`rejection_percent` decimal, default 7.00, editable (R24)~~ · `created_by` FK→users · `created_at`
+*Note (2026-08-31): `rejection_percent` column still exists (always 7.00) but is no longer editable per contract and no longer read by any calculation — rejection is a fixed constant (`backend/app/core/constants.py::FARMER_REJECTION_PCT`), not a contract term. See `Business_Rules.md` R24/R28 (rewritten).*
 
 **`harvests`** (Phase 5) — multiple per registration allowed (R26)
 `id` PK · `season_registration_id` FK · `harvest_date` date req · `supervisor_name` string · `supervisor_contact` string · `created_by` FK→users · `created_at`
@@ -323,13 +324,14 @@ Unique constraint: `(plot_id, variety_name)`
 ### Post-harvest pipeline
 
 **`weighing_records`** (Phase 6) — one per vehicle trip
-`id` PK · `vehicle_trip_id` FK→vehicle_trips, unique · `date` date · `slip_no` string · `supervisor_name` string · `num_crates` integer · `total_weight_kg` decimal · `rejection_pct` decimal (snapshot of contract's `rejection_percent` at save time — preserves historical accuracy) · `rejection_kg` decimal (calculated) · `net_weight_kg` decimal (calculated) · `slip_photo_url` string · `created_by` FK→users · `created_at`
+`id` PK · `vehicle_trip_id` FK→vehicle_trips, unique · `date` date · `slip_no` string · `supervisor_name` string · `num_crates` integer · `total_weight_kg` decimal · `rejection_pct` decimal (the fixed rate actually charged, always `FARMER_REJECTION_PCT` — not a contract snapshot, see note below) · `actual_rejection_pct` decimal (operator-observed; recorded for reference only, never charged) · `rejection_kg` decimal (calculated: `total_weight_kg × FARMER_REJECTION_PCT / 100`) · `net_weight_kg` decimal (calculated) · `slip_photo_url` string · `created_by` FK→users · `created_at`
+*Note (2026-08-31): `rejection_pct` previously snapshotted the contract's (then-editable) `rejection_percent`. Founder confirmation reverses this — rejection is now a fixed 7% company-wide constant, not read from the contract. See `Business_Rules.md` R28 (rewritten).*
 
 **`arrival_qc`** (Phase 7) — one per harvest event (plot + day)
 `id` PK · `harvest_id` FK→harvests · `inspection_date` date · `fruit_colour_green_pct`, `fruit_colour_milky_pct`, `fruit_colour_yellow_pct` decimal · `tss_percent` decimal · `thrips_percent` decimal · `bhuri_percent` decimal · `black_spot_percent` decimal · `cercospora_percent` decimal · `overall_observation` enum(Good, Very Good, Excellent) · `result` enum(Pass, Fail) · `notes` text · `inspected_by` FK→users · `created_at`
 
 **`packaging_records`** (Phase 8) — each row = one Lot; multiple per harvest allowed
-`id` PK · `harvest_id` FK→harvests · `date` date · `slip_no` string · `lot_id` string unique (system-generated, traceable to plot+date+customer) · `pack_size` string(4 Kg / 4.5 Kg / 5 Kg) · `compliance_type` string(EU / Non-Testing) · `customer_id` FK→customers *(was a plain string — see resolution in Section 9)* · `total_weight_kg` decimal · `rejection_contract_kg` decimal · `net_weight_kg` decimal (calculated) · `actual_rejection_kg` decimal · `actual_rejection_pct` decimal (calculated) · `num_boxes` integer · `num_pallets` integer · `ggn_number` string (copied from `company_settings` at time of packing) · `created_by` FK→users · `created_at`
+`id` PK · `harvest_id` FK→harvests · `date` date · `slip_no` string · `lot_id` string unique (system-generated, traceable to plot+date+customer) · `pack_size` string(4 Kg / 4.5 Kg / 5 Kg) · `compliance_type` string(EU / Non-Testing) · `customer_id` FK→customers *(was a plain string — see resolution in Section 9)* · `total_weight_kg` decimal · `rejection_contract_kg` decimal (fixed 7% of `total_weight_kg`, founder-confirmed 2026-08-31 — legacy column name, no longer "the contract's" rate; see `Business_Rules.md` R28) · `net_weight_kg` decimal (calculated) · `actual_rejection_kg` decimal (observed, entered fresh at packing — informational only) · `actual_rejection_pct` decimal (calculated from `actual_rejection_kg`; informational only) · `num_boxes` integer · `num_pallets` integer · `ggn_number` string (copied from `company_settings` at time of packing) · `created_by` FK→users · `created_at`
 
 ### Inventory (Phase 9)
 
@@ -436,7 +438,7 @@ Full detail in `Open_Questions.md` (14 items). None block Phases 1–8.
 | 2 | Is manual GrapeNet/APEDA export data entry sufficient (no integration)? | Cross-cutting | Open |
 | 3 | One harvest per plot per season, or multiple rounds? (non-blocking) | Phase 5 | Open |
 | 4 | Multiple varieties per plot — separate plots or one plot, multiple varieties? | Phase 1–2 data model | **✅ RESOLVED 2026-08-11** — one plot, multiple varieties, each with its own pipeline (see Section 9 note below) |
-| 5 | Is 7% rejection a fixed default or does it vary? Who absorbs excess actual rejection? | Phase 4, 6, 8 | Open (rejection-split half resolved earlier, see `Business_Rules.md` R28) |
+| 5 | Is 7% rejection a fixed default or does it vary? Who absorbs excess actual rejection? | Phase 4, 6, 8 | **✅ RESOLVED 2026-08-31** — fixed, company-wide, founder-confirmed. Not negotiated per contract; no MIN()/split against actual (`Business_Rules.md` R28, rewritten) |
 | 6 | What Farmer Invoice deductions apply besides rejection %? | Farmer Invoice (unscoped) | Open |
 | 7 | Do any customers need shipment/traceability data in their own format? | Phase 8 | Open |
 | 8 | Confirm the 5-role structure | Cross-cutting | Open (now moot in its literal form — role count is 6 as of 2026-08-11 with Packaging Supervisor added) |
@@ -649,7 +651,7 @@ Create user (email, initial password, role), edit role, deactivate. Available on
 
 | Field | Calculation |
 |---|---|
-| Rejection % | pulled from this farmer's Contract `rejection_percent` (NOT hardcoded 7%) |
+| Rejection % | ~~pulled from this farmer's Contract `rejection_percent` (NOT hardcoded 7%)~~ **REVERSED 2026-08-31: fixed at 7% company-wide (founder-confirmed) — `backend/app/core/constants.py::FARMER_REJECTION_PCT`, not read from the contract. See `Business_Rules.md` R28.** |
 | Rejection Amount (Kg) | Total Weight × Rejection % |
 | Net Weight (Kg) | Total Weight − Rejection Amount |
 
@@ -720,7 +722,7 @@ Once Customer is selected, system shows the **correct packing materials** for th
 | Date | date | |
 | Slip No. | text | |
 | Total Weight (Kg) | decimal | weight going into this packing run |
-| 7% Farmer Rejection (Kg) | decimal | system-calculated from contract rejection %, shown read-only |
+| 7% Farmer Rejection (Kg) | decimal | system-calculated from a fixed 7% company-wide rate (founder-confirmed 2026-08-31 — not from the contract), shown read-only |
 | Net Weight (Kg) | decimal | system-calculated |
 | Actual Rejection (Kg) | decimal | defects found during packing — separate from farmer rejection |
 | Actual Rejection (%) | decimal | system-calculated from actual rejection kg / total weight |
@@ -741,7 +743,7 @@ Once Customer is selected, system shows the **correct packing materials** for th
 ### 11.5 Technical Notes (Phase 6–8)
 
 - **Camera access** for Weighing slip photo: same mechanism as GPS capture — browser/device permission prompt, no API key, no extra cost.
-- **Rejection % snapshot:** when saving a Weighing Record, copy the contract's `rejection_percent` into the weighing record itself. This preserves historical accuracy — if the contract rate is later corrected, old weighing records still reflect what was applied at the time.
+- ~~**Rejection % snapshot:** when saving a Weighing Record, copy the contract's `rejection_percent` into the weighing record itself. This preserves historical accuracy — if the contract rate is later corrected, old weighing records still reflect what was applied at the time.~~ **REVERSED 2026-08-31:** rejection is a fixed 7% company-wide constant (founder-confirmed, `backend/app/core/constants.py::FARMER_REJECTION_PCT`) — there's no contract rate to snapshot anymore. `weighing_records.rejection_pct` and `packaging_records.rejection_contract_kg` are both computed from the fixed constant, not read from `contracts.rejection_percent`. Actual observed rejection is still captured (`actual_rejection_pct`/`actual_rejection_kg`) but is informational only — see `Business_Rules.md` R28 (rewritten).
 - **Lot ID generation:** exact format TBD, but must encode enough to be traceable (e.g. plot code + date + customer code). Must be unique system-wide.
 - **Cascading dropdowns in Packaging:** for Phase 8 to work independently of Phase 9 (Item Master), hardcode the valid combinations from the Excel's "Finished Material" list as static reference data. When Phase 9 is built, swap the hardcoded list for the `finished_products` table.
 
@@ -752,7 +754,7 @@ Once Customer is selected, system shows the **correct packing materials** for th
 
 ### 11.7 Definition of Done (Phases 6–8)
 
-- Supervisor can select an un-weighed vehicle trip, enter weighing data, and see rejection calculated from the contract's actual rejection % (not hardcoded 7%).
+- Supervisor can select an un-weighed vehicle trip, enter weighing data, and see rejection calculated from a fixed 7% company-wide rate (founder-confirmed, 2026-08-31 — reverses the earlier "from the contract, not hardcoded" wording; see `Business_Rules.md` R28).
 - Crate count mismatch shows a red warning but does not block saving.
 - Slip photo can be captured directly from device camera.
 - Arrival QC can only be created for harvests that have completed weighing; uses same quality fields as Field QC; pass/fail gates progression.

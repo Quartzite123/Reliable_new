@@ -3,8 +3,10 @@ Packaging (Phase 8). Office Worker. Each record = one Lot.
 
 POST /harvests/{id}/packaging — gate: registration ARRIVAL_QC_PASSED (or
                                 PACKED — multiple runs per harvest allowed).
-                                Server generates lot_id, snapshots contract
-                                rejection kg, stamps GGN from company_settings.
+                                Server generates lot_id, applies the fixed
+                                7% rejection (app/core/constants.py, not
+                                read from the contract), stamps GGN from
+                                company_settings.
 GET  /packaging               — list (filter by harvest/customer)
 
 Lot ID format: RF-<plotId>-<harvestdate YYYYMMDD>-<customer code>-<packsize>-<seq>
@@ -21,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.core.constants import FARMER_REJECTION_PCT
 from app.core.deps import get_current_user, require_role
 from app.core.enums import PackSize, UserRole
 from app.models.company_settings import CompanySettings
@@ -81,18 +84,12 @@ def record_packaging(
     if customer is None or not customer.is_active:
         raise HTTPException(status_code=404, detail="Customer not found or inactive")
 
-    contract = reg.contract
-    if contract is None:
-        # Unreachable through the normal pipeline (harvest requires a
-        # contract), but guard anyway — the rejection % MUST come from a
-        # contract, never a default.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="No contract found for this registration — cannot apply rejection percent",
-        )
-    pct = Decimal(contract.rejection_percent)
     total = Decimal(body.total_weight_kg)
-    rejection_contract_kg = (total * pct / Decimal(100)).quantize(Decimal("0.01"))
+    # Fixed 7% deduction, founder-confirmed — not read from the contract.
+    # See app/core/constants.py. "rejection_contract_kg" is a legacy column
+    # name from when this was contract-driven; it now just means "the
+    # rejection weight charged."
+    rejection_contract_kg = (total * FARMER_REJECTION_PCT / Decimal(100)).quantize(Decimal("0.01"))
     net_kg = (total - rejection_contract_kg).quantize(Decimal("0.01"))
 
     actual_rej_pct = None

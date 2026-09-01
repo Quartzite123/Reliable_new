@@ -22,6 +22,10 @@ import { useCreateWeighing, useWeighingContext } from '../hooks'
 import { weighingSchema, type WeighingFormValues } from '../schema'
 
 const DEFAULT_CRATE_TARE_WEIGHT_KG = 1.6
+// Fixed 7% deduction, founder-confirmed — not negotiated, not read from the
+// contract, not compared against actual observed rejection. Mirrors backend
+// app/core/constants.py FARMER_REJECTION_PCT. Business_Rules.md R28.
+const FARMER_REJECTION_PCT = 7
 
 export function WeighingNewPage() {
   const [searchParams] = useSearchParams()
@@ -68,10 +72,9 @@ function WeighingForm({ vehicleTripId }: { vehicleTripId: EntityId }) {
     defaultValues: { date: new Date().toISOString().slice(0, 10), produceType: 'Grapes' },
   })
 
-  const [crateCountAtWeighing, grossWeightKg, actualRejectionPct, produceType] = watch([
+  const [crateCountAtWeighing, grossWeightKg, produceType] = watch([
     'crateCountAtWeighing',
     'grossWeightKg',
-    'actualRejectionPct',
     'produceType',
   ])
 
@@ -97,19 +100,15 @@ function WeighingForm({ vehicleTripId }: { vehicleTripId: EntityId }) {
   const cratesDiffer =
     harvestEstimate !== undefined && crateCountNum > 0 && Math.abs(crateCountNum - harvestEstimate) / harvestEstimate > 0.05
 
-  const contractPct = context.contractRejectionPct !== undefined ? Number(context.contractRejectionPct) : undefined
-  const actualPctNum = actualRejectionPct ?? 0
-  const appliedPct = contractPct !== undefined ? Math.min(actualPctNum, contractPct) : actualPctNum
-  const rejectionKg = round2(netFruitWeightKg * (appliedPct / 100))
+  // Actual observed rejection is recorded but never charged — the farmer is
+  // always paid on a fixed 93% of net weight (Business_Rules R28, rewritten).
+  const rejectionKg = round2(netFruitWeightKg * (FARMER_REJECTION_PCT / 100))
   const netPayableKg = round2(netFruitWeightKg - rejectionKg)
-  const exceedsContract = contractPct !== undefined && actualPctNum > contractPct
-  const exporterAbsorbedKg = exceedsContract ? round2(netFruitWeightKg * ((actualPctNum - contractPct!) / 100)) : 0
 
   // Validate everything except actualRejectionPct first — that field's input
   // lives inside the dialog below, so it must never be the reason the
-  // dialog fails to open. Seed it with the contract value (or 0 if the
-  // contract % genuinely isn't available — real API gap, see api.ts) only
-  // if the user hasn't already typed something.
+  // dialog fails to open. It's left blank for the operator to type the real
+  // observed figure — there's no contract value to seed it from anymore.
   const openReview = async () => {
     const fieldsToValidate = [
       'date',
@@ -129,9 +128,6 @@ function WeighingForm({ vehicleTripId }: { vehicleTripId: EntityId }) {
     ] as const
     const valid = await trigger(fieldsToValidate)
     if (!valid) return
-    if (actualRejectionPct === undefined) {
-      setValue('actualRejectionPct', contractPct ?? 0)
-    }
     setDialogOpen(true)
   }
 
@@ -280,11 +276,13 @@ function WeighingForm({ vehicleTripId }: { vehicleTripId: EntityId }) {
               Gross Weight (post-tare): <span className="font-semibold text-gray-900">{netFruitWeightKg.toFixed(2)} kg</span>
             </p>
 
-            <FormField label="Contract rejection %" htmlFor="contractRejectionPctDisplay">
-              <TextInput id="contractRejectionPctDisplay" value={contractPct !== undefined ? `${contractPct.toFixed(2)}%` : '— (calculated by server)'} disabled readOnly />
-            </FormField>
-
-            <FormField label="Actual rejection %" htmlFor="actualRejectionPct" required error={errors.actualRejectionPct?.message}>
+            <FormField
+              label="Actual rejection % (observed)"
+              htmlFor="actualRejectionPct"
+              required
+              hint="Recorded for reference only. The farmer is always paid on a fixed 93% of net weight (7% rejection) — this figure does not change the payout."
+              error={errors.actualRejectionPct?.message}
+            >
               <NumberInput
                 id="actualRejectionPct"
                 unit="%"
@@ -293,23 +291,15 @@ function WeighingForm({ vehicleTripId }: { vehicleTripId: EntityId }) {
               />
             </FormField>
 
-            {exceedsContract && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">
-                <p className="font-semibold">Actual exceeds contract cap</p>
-                <p className="mt-1 text-sm">Farmer pays: {contractPct!.toFixed(2)}% = {rejectionKg.toFixed(2)} kg</p>
-                <p className="text-sm">Exporter absorbs: {exporterAbsorbedKg.toFixed(2)} kg</p>
-              </div>
-            )}
-
             <p className="text-gray-700">
-              Rejection Weight: <span className="font-semibold text-gray-900">{rejectionKg.toFixed(2)} kg</span>
+              Rejection Weight (fixed 7%): <span className="font-semibold text-gray-900">{rejectionKg.toFixed(2)} kg</span>
             </p>
             <p className="text-gray-700">
               Net Payable Weight: <span className="font-semibold text-gray-900">{netPayableKg.toFixed(2)} kg</span>
             </p>
             <p className="text-xs text-gray-500">
-              Final rejection %, rejection weight, and net weight are calculated by the server from the contract's
-              rejection percentage — the figures above are a preview only.
+              Rejection weight and net weight are calculated by the server using a fixed 7% rate — the figures above
+              are a preview only.
             </p>
           </div>
         }

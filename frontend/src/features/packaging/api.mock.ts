@@ -50,7 +50,6 @@ export const packagingApiMock = {
           plotNumber: context.plot.plotNumber,
           variety: context.plot.variety,
           harvestDate: h.harvestDate,
-          contractRejectionPercent: Number(context.contract.rejectionPercent),
           packingRunsSoFar: packagingStore.filter((p) => p.harvestId === h.id).length,
         }
       })
@@ -103,8 +102,10 @@ export const packagingApiMock = {
       throw new ApiError(409, { message: 'This record cannot continue until Arrival QC has passed.' })
     }
 
-    const rejectionPct = Number(context.contract.rejectionPercent)
-    const contractRejectionKg = Math.round(input.totalWeightKg * (rejectionPct / 100) * 100) / 100
+    // Fixed 7% deduction, founder-confirmed — not read from the contract
+    // (Business_Rules R28, rewritten). Mirrors backend FARMER_REJECTION_PCT.
+    const FARMER_REJECTION_PCT = 7
+    const contractRejectionKg = Math.round(input.totalWeightKg * (FARMER_REJECTION_PCT / 100) * 100) / 100
     const netWeightKg = Math.round((input.totalWeightKg - input.actualRejectionKg) * 100) / 100
     const actualRejectionPct = Math.round((input.actualRejectionKg / input.totalWeightKg) * 100 * 100) / 100
 

@@ -18,9 +18,9 @@ export interface WeighingRecord extends Timestamped {
   supervisorName?: string
   numCrates?: number
   totalWeightKg: string // "Gross Weight" on the physical slip — post-tare, pre-rejection net fruit weight for this trip
-  rejectionPct?: string // contract rejection % snapshot
-  actualRejectionPct?: string // what the operator entered (or the contract default)
-  rejectionKg?: string // calculated server-side from MIN(actual, contract)
+  rejectionPct?: string // the fixed rate actually charged (always 7 — founder-confirmed, not read from the contract)
+  actualRejectionPct?: string // operator-observed rejection — recorded for reference only, never charged
+  rejectionKg?: string // calculated server-side from the fixed rate only
   netWeightKg?: string // payable: totalWeightKg − rejectionKg
   slipPhotoUrl?: string
 
@@ -73,8 +73,10 @@ export interface CreateWeighingInput {
  * Context for the weighing entry form — auto-filled reference fields, from
  * `GET /weighing/pending` (`PendingTripRead`) plus a couple of fields the
  * mock can enrich that the real backend cannot yet (see api.ts): the real
- * `PendingTripRead` has no MH number, village, or contract rejection % —
- * those stay `undefined` against the real API rather than being invented.
+ * `PendingTripRead` has no MH number or village — those stay `undefined`
+ * against the real API rather than being invented. There is no contract
+ * rejection % here anymore — the rejection rate is a fixed constant
+ * (backend app/core/constants.py), not read from any contract.
  */
 export interface WeighingContext {
   vehicleTripId: EntityId
@@ -88,7 +90,6 @@ export interface WeighingContext {
   harvestDate: string
   mhNumber?: string
   villageName?: string
-  contractRejectionPct?: string
 }
 
 export interface WeighingRow {

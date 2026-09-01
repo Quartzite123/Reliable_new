@@ -8,7 +8,6 @@ import { EmptyState } from '@/components/data/EmptyState'
 import { LoadingState } from '@/components/data/LoadingState'
 import { ErrorState } from '@/components/data/ErrorState'
 import { ReadOnlyReferenceCard } from '@/components/workflow/ReadOnlyReferenceCard'
-import { Alert } from '@/components/feedback/Alert'
 import { FormField } from '@/components/forms/FormField'
 import { TextInput } from '@/components/forms/TextInput'
 import { NumberInput } from '@/components/forms/NumberInput'
@@ -103,16 +102,22 @@ function PackagingForm({ harvestId, onCreated }: { harvestId: EntityId; onCreate
   const selectedCustomerName = availableCustomers.find((c) => c.id === customerId)?.name
   const availablePackSizes = selectedCustomerName && harvestInfo.variety ? packSizesFor(harvestInfo.variety, selectedCustomerName) : []
 
-  const contractRejectionKgPreview =
-    typeof totalWeightKg === 'number' ? Math.round(totalWeightKg * (harvestInfo.contractRejectionPercent / 100) * 100) / 100 : null
+  // Fixed 7% deduction, founder-confirmed — not read from the contract, not
+  // compared against actual observed rejection (Business_Rules R28,
+  // rewritten). Mirrors backend app/core/constants.py FARMER_REJECTION_PCT.
+  const FIXED_REJECTION_PCT = 7
+  const rejectionKgPreview =
+    typeof totalWeightKg === 'number' ? Math.round(totalWeightKg * (FIXED_REJECTION_PCT / 100) * 100) / 100 : null
+  // Net weight uses the fixed rejection, matching what the server actually
+  // saves — NOT actualRejectionKg, which is recorded but never charged.
   const netWeightKgPreview =
-    typeof totalWeightKg === 'number' && typeof actualRejectionKg === 'number' ? totalWeightKg - actualRejectionKg : null
+    typeof totalWeightKg === 'number' && rejectionKgPreview !== null
+      ? Math.round((totalWeightKg - rejectionKgPreview) * 100) / 100
+      : null
   const actualRejectionPctPreview =
     typeof totalWeightKg === 'number' && totalWeightKg > 0 && typeof actualRejectionKg === 'number'
       ? Math.round((actualRejectionKg / totalWeightKg) * 100 * 100) / 100
       : null
-  const exceedsContractRejection =
-    actualRejectionPctPreview !== null && actualRejectionPctPreview > harvestInfo.contractRejectionPercent
 
   const onSubmit = async (values: PackagingFormValues) => {
     if (!customerId) {
@@ -142,7 +147,7 @@ function PackagingForm({ harvestId, onCreated }: { harvestId: EntityId; onCreate
           fields={[
             { label: 'Variety', value: harvestInfo.variety ?? '—' },
             { label: 'Harvest date', value: harvestInfo.harvestDate },
-            { label: 'Contract rejection %', value: `${harvestInfo.contractRejectionPercent}%` },
+            { label: 'Rejection rate (fixed)', value: '7%' },
           ]}
         />
       </SectionCard>
@@ -206,15 +211,16 @@ function PackagingForm({ harvestId, onCreated }: { harvestId: EntityId; onCreate
             </FormField>
           </div>
 
-          {contractRejectionKgPreview !== null && netWeightKgPreview !== null && (
+          {rejectionKgPreview !== null && netWeightKgPreview !== null && (
             <p className="text-sm text-gray-600">
-              Contract rejection reference: {contractRejectionKgPreview} kg · Net weight: {netWeightKgPreview} kg
+              Rejection (fixed 7%): {rejectionKgPreview} kg · Net weight: {netWeightKgPreview} kg
             </p>
           )}
-          {exceedsContractRejection && (
-            <Alert variant="warning" title="Actual rejection is higher than the contract's agreed percentage">
-              Contract allows {harvestInfo.contractRejectionPercent}%, this packing run is at {actualRejectionPctPreview}%.
-            </Alert>
+          {actualRejectionPctPreview !== null && (
+            <p className="text-sm text-gray-500">
+              Observed rejection: {actualRejectionPctPreview}% — recorded for reference only, does not affect net
+              weight.
+            </p>
           )}
         </SectionCard>
 

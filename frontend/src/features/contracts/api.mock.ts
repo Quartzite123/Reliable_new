@@ -96,7 +96,7 @@ export const contractsApiMock = {
       seasonRegistrationId: input.seasonRegistrationId,
       contractDate: input.contractDate,
       ratePerKg: String(input.ratePerKg),
-      rejectionPercent: String(input.rejectionPercent ?? 7),
+      rejectionPercent: '7.00', // fixed, not a contract term — Business_Rules R24/R28
       terms: input.terms,
       notes: input.notes,
       createdBy: 2,
