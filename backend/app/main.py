@@ -2,14 +2,17 @@ import logging
 import re
 import uuid
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
 from app.core.config import settings
+from app.db import get_db
 
 logger = logging.getLogger("app")
 
@@ -32,7 +35,20 @@ app.add_middleware(
 
 
 @app.get("/health")
-def health_check():
+def health_check(db: Session = Depends(get_db)):
+    """
+    Queries the DB (2026-09-02) — previously a static {"status": "ok"}
+    with no DB dependency at all, which meant UptimeRobot's 5-minute ping
+    kept the Render process warm but did nothing for Neon: Neon suspends
+    its compute based on its own DB-activity timer, independent of
+    whether the app process is alive. This is what actually removes the
+    underlying cause (Neon going idle) rather than relying on
+    pool_pre_ping to just handle the symptom gracefully when it happens —
+    see db/base.py. A genuine DB outage now correctly fails this check
+    (500, via the catch-all handler below) instead of always reporting
+    healthy regardless of DB state.
+    """
+    db.execute(select(1))
     return {"status": "ok"}
 
 

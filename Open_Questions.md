@@ -4,6 +4,10 @@ These items are currently built on best-guess assumptions (see corresponding rul
 
 *(2026-08-11: Phase 12, referenced in earlier revisions of this line as part of "Phases 1–12," is dropped — see Q12 below. Phase 13, Finished Goods QC, was added the same day — see Q13 below.)*
 
+*(2026-09-01: Q15 added — Export Documents' attachment model, following the CEO's confirmation of that module's scope. See `PHASE_MAP.md` Section 7 for the scope write-up.)*
+
+*(2026-09-02: Q16 added — a pre-existing conflict in `PHASE_MAP.md` between the "MH number is farmer-level" narrative (Section 7) and the "MH number is per plot" finding (tail "New information" section) was found during doc review, marked in both places, and recorded here rather than silently resolved either way.)*
+
 ---
 
 ## Original Questions (from Phase 0 Discovery)
@@ -46,10 +50,28 @@ These items are currently built on best-guess assumptions (see corresponding rul
 
 ---
 
+## New Questions (Reports & Export Documents scoping, 2026-09-01)
+
+15. **Export document attachment model** — CEO confirmed the scope of the new `reports_documents` phase (`PhaseKey.REPORTS_DOCUMENTS`, added 2026-09-01 — see `PHASE_MAP.md` Section 5 and Section 7, `CLAUDE.md` §6): it gates the real export document images/files per shipment — fumigation certificate, phytosanitary certificate, certificate of origin, AGMARK, packing list, and other shipment-specific certificates. These attach to specific entities (a pallet, a container, a shipment — clicking through to one of those should show its documents), stored in Cloudinary the same way every other upload in this system already is. Access is phase-gated.
+
+    This is confirmed *scope*, not a design — no schema exists yet, deliberately, until these are answered:
+    - **Which entity does each document type attach to?** A pallet? A container? A shipment (a concept with no table yet — `container_loading`/`export_documents` are both still unscoped as tables)? Different document types plausibly attach at different levels — e.g. a packing list might be per-lot while a certificate of origin is per-container.
+    - **Is it one document per type, or many?** Can a shipment have multiple phytosanitary certificates (reissued, corrected), or is each type strictly 1:1 with its parent entity?
+    - **Who uploads them?** System-generated (like the packing list plausibly could be), Office Worker upload after receiving the physical/digital certificate from a certifying body, or a mix depending on document type?
+    - **Are they needed before or after shipping?** Some (packing list) are plausibly available pre-shipment; others (phytosanitary, fumigation) are issued by external authorities and may only exist close to or after departure. This decides whether "document complete" ever gates a status transition the way QC stages do, or whether it's purely a reference attachment with no gating behavior at all.
+
+---
+
+## New Question (data-model conflict found during doc review, 2026-09-02)
+
+16. **MH registration number — farmer-level or plot-level?** `PHASE_MAP.md` Section 7 narrates a 2026-08-11 "CEO confirmed" decision that MH number moved to the farmer (`farmers.mh_number`). The document's own tail "New information" section says the opposite — MH number is per plot, three per farmer, and that the farmer-level move should be reverted. These two sections directly contradict each other, and neither has been reconciled. **The live code follows the per-plot version**: `backend/app/models/farmer.py`'s `Farmer` class has no `mh_number` column at all; `backend/app/models/plot.py`'s `Plot` class has `mh_registration_number` (unique, nullable) — confirmed by reading both files. That the code currently agrees with the "New information" row is not the same as that row being confirmed correct; it was never checked against Section 7's conflicting claim. **Marked, not resolved** — pending an APEDA registration certificate from the client, which should settle definitively whether MH registration is issued per-farmer or per-plot. See `PHASE_MAP.md` Section 7 (`farmers`/`plots` table definitions) and the "New information" section, both flagged with matching conflict notes as of 2026-09-02.
+
+---
+
 ## How to Use This Document
 
 When the CEO confirms an answer:
 1. Update the relevant Business Rule in `Business_Rules.md`
-2. Update the relevant phase spec (`TEMP_Phase01-05_Draft.md`, `TEMP_Phase06-08_Draft.md`, or `TEMP_Phase09-12_Draft.md`)
+2. Update the relevant phase spec in `PHASE_MAP.md` *(the `TEMP_Phase01-05_Draft.md`/`TEMP_Phase06-08_Draft.md`/`TEMP_Phase09-12_Draft.md` files this step used to point to were folded into `PHASE_MAP.md` and removed during the 2026-08-07 directory cleanup — reference removed 2026-09-02, they no longer exist)*
 3. Mark the question as resolved here with the answer and date
 4. If the answer changes a working assumption, flag any code that was built against the old assumption

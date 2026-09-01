@@ -31,12 +31,12 @@ Reliable Fresh Export Management System is an internal PWA for Reliable Fresh, a
 | 9 (9A/9B/9C) | Inventory Management (Item Master, Stock Management, Dashboard) | Scoped | Phase 9–12 draft | `item_master_materials`, `item_master_products`, `bom_entries`, `stock_movements` | 8 (auto stock-out hooks off packaging_records) | ~~#11 (ordering process)~~ **RESOLVED 2026-08-11 — Pattern C** ; #14 (per-box vs per-container deduction timing) still open |
 | 10 | Palletisation | Scoped | Phase 9–12 draft | `pallets`, `palletisation_lots` | 8 (packaging records to draw lots from) | #10 (floor workflow, Pallet ID format) |
 | 11 | Pre-Cooling | Scoped | Phase 9–12 draft | `pre_cooling_records` | 10 (pallets must exist), **now also 13 (Finished Goods QC must pass) — see Section 4** | #9 (who performs this role) |
-| 12 | ~~Purchase Order (Farm Input Procurement)~~ | ❌ **DROPPED 2026-08-11** | Phase 9–12 draft | `purchase_orders`, `purchase_order_line_items` — **exist in the DB but unused, will be removed in a future migration** | None — fully standalone | Moot — CEO confirmed no fertilizer purchases, PO module out of scope entirely (Q12 resolved) |
+| 12 | ~~Purchase Order (Farm Input Procurement)~~ | ❌ **DROPPED 2026-08-11** | Phase 9–12 draft | `purchase_orders`, `purchase_order_line_items` — **exist in the DB but unused; the router is unregistered from `app/main.py` as of 2026-09-01 (routes 404), tables/router file still pending removal** | None — fully standalone | Moot — CEO confirmed no fertilizer purchases, PO module out of scope entirely (Q12 resolved) |
 | 13 | Finished Goods QC *(added 2026-08-11)* | ⚠️ Position confirmed, fields TBD | CEO confirmation round, Aug 2026 + Business Rule R21 | `finished_goods_qc` (pending design) | Sequenced between 10 (Palletisation) and 11 (Pre-Cooling) — **numbered 13 per explicit instruction even though it sits pipeline-earlier than 11; flagged as a numbering/sequencing mismatch in the change report** | Q13 resolved (position); exact fields still pending a CEO document |
 | — | Container Indent | **Not yet scoped** | Flow chart + R46 | `container_indent_requests` (future) | 11 (Pre-Cooling complete, per R45) | None numbered, but the 3-step CHA handoff (R46) has no screen-level spec |
 | — | Container Loading | **Not yet scoped** | Flow chart + R47 | `container_loading` (future) | Container Indent allocation confirmed by CHA | None numbered — no screen-level spec |
 | — | Farmer Invoice | **Not yet scoped** | Flow chart + R48 | `farmer_invoices` (future) | Container Loading complete | #6 (deduction rules beyond rejection %) |
-| — | Export Documents | **Not yet scoped** | Flow chart + R49–51 | `export_documents` (future) | Tied to a shipment/container, not to a specific earlier phase | None numbered |
+| — | Export Documents | **Scope confirmed 2026-09-01, schema not yet designed** — see Section 7 | Flow chart + R49–51 | `export_documents` (future) — gated by the new `reports_documents` phase (Section 5) | Tied to a shipment/container, not to a specific earlier phase | Q15 (attachment model — added 2026-09-01) |
 
 ---
 
@@ -220,6 +220,12 @@ Independent of the harvest/packing pipeline — applied only to farm-input POs (
 
 > **As of 2026-08-11, the role × phase matrix below is a DEFAULT starting point only.** The actual permission system is phase-based: admin assigns specific phases to each user via `user_phase_access`. A user's role label does not determine their access — their phase assignments do. Any user can have any combination of phases. See Section 7 (`user_phase_access` table), `Business_Rules.md` R53 (rewritten) and R58, `CLAUDE.md` Section 4 and Section 12.
 
+**Updated 2026-09-01:** `user_phase_access` now has 16 phase keys, not 14. The matrix below still only has columns for the 13 numbered pipeline phases (1A–13) — `admin` was never a column here either, since "full access to every pipeline phase" is a row-level fact about the Admin role, not a pipeline stage. The two additions are the same shape as `admin`: cross-cutting, not pipeline stages, so they don't get columns.
+- **`users`** (split out of `admin`) — user management: create/edit/deactivate accounts and assign phases to non-Admin users. Any role can hold it, not just Admin — see `CLAUDE.md` §6 and `backend/app/services/user_admin_guard.py` for the real boundary (a `users` holder still can't touch Admin accounts, grant `users`/`admin`, or edit their own phases; the phase gate alone is not the whole story).
+- **`reports_documents`** — placeholder, same pattern as `finished_goods_qc` was before Phase 13 got its position confirmed. As of 2026-09-01 it has confirmed *scope* (see the new subsection at the end of Section 7) but no schema yet — gates nothing today.
+
+Admin holds all 16 phases, always (enforced server-side — an Admin's phase set can never be partially edited, by anyone, including another Admin). Read that as the Admin row below implicitly extending to "F" for `users` and `reports_documents` too, the same way it already covers `admin` itself without a column for it.
+
 Legend: **F** = full access (setup/manage) · **C** = primary create/data-entry role · **R** = read-only · **—** = no access
 
 | Role | 1A | 1B | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 ⚠️DROPPED | 13 |
@@ -271,18 +277,24 @@ Consolidated from every phase's data model, in pipeline order. `FK` = foreign ke
 `id` PK · `name` string (e.g. "2025-26") · `start_date` date · `end_date` date · `is_active` boolean (only one row may be active at a time) · `created_by` FK→users · `created_at`
 *Note: replaces the old assumption that a season is just a year integer. See `Business_Rules.md` R55.*
 
-**`users`**
-`id` PK · `email` string unique (login username) · `password_hash` string · `role` enum(admin, field_worker, lab_worker, office_worker, stock_manager, **packaging_supervisor** *(added 2026-08-11)*) · `active` boolean (soft-deactivate) · `created_at`, `updated_at`
+**`users`** *(columns below current as of 2026-09-01 — several were missing from earlier revisions of this document; the table itself was already this shape, only the write-up lagged)*
+`id` PK · `email` string unique (login username) · `name` string, nullable · **`mobile` string, nullable in the DB but required by the API for new accounts** *(added 2026-09-01 — not unique, same treatment as `farmers.mobile`)* · `password_hash` string · `role` enum(admin, field_worker, lab_worker, office_worker, stock_manager, **packaging_supervisor** *(added 2026-08-11)*) · `active` boolean (soft-deactivate) · `created_at`, `updated_at` · `last_login_at`, `last_logout_at`, `last_activity_at` datetime, nullable (login/session bookkeeping, backs the admin User Activity view) · `failed_login_count` integer, default 0 · `last_failed_login_at` datetime, nullable · **`password_changed_at` datetime, not nullable, `server_default=now()`** *(added 2026-09-01 — see the security-audit note below)*
+
+*Login lockout (2026-09-01):* `failed_login_count`/`last_failed_login_at` are enforced, not just tracked — 5 consecutive failures locks the account for 15 minutes (`backend/app/core/security.py::MAX_FAILED_LOGIN_ATTEMPTS`/`LOGIN_LOCKOUT_MINUTES`); an Admin or `users`-phase holder can clear a lockout early from the Users screen.
+
+*Token revocation (2026-09-01):* `password_changed_at` is compared against the `iat` claim of every access/refresh token on every request (`backend/app/core/deps.py::token_predates_password_change`) — a password change immediately invalidates every session the account currently holds, access and refresh tokens both. This is also the account-recovery mechanism referenced in `CLAUDE.md` §6: there is no self-service or email-based password reset; an Admin/`users`-holder resets a password from the Users screen, and if no working Admin account exists at all, `scripts/seed_admin.py` is the documented break-glass procedure.
 
 **`user_phase_access`** (added 2026-08-11) — maps users to their permitted phases
-`id` PK · `user_id` FK→users · `phase_key` string enum(farmer_registration, plot_registration, field_qc, lab_sampling, farmer_contract, harvesting, weighing, arrival_qc, packaging, inventory_management, palletisation, pre_cooling, finished_goods_qc, admin) · `created_at`
+`id` PK · `user_id` FK→users · `phase_key` string enum(farmer_registration, plot_registration, field_qc, lab_sampling, farmer_contract, harvesting, weighing, arrival_qc, packaging, inventory_management, palletisation, pre_cooling, finished_goods_qc, admin, **users, reports_documents** *(added 2026-09-01 — see Section 5)*) · `created_at`
 Unique constraint: `(user_id, phase_key)`
-*Note: `users.role` is a display label only. Actual screen access is determined by `user_phase_access` entries. Admin assigns any combination of the 14 phases to any user. See `Business_Rules.md` R53 (rewritten), R58, `CLAUDE.md` Section 4 and Section 12.*
+*Note: `users.role` is a display label only. Actual screen access is determined by `user_phase_access` entries. Admin assigns any combination of the 16 phases *(was 14 — `users` and `reports_documents` added 2026-09-01)* to any user, subject to the enforcement in `backend/app/services/user_admin_guard.py` (a non-Admin `users`-phase holder has real restrictions on which accounts and phases they can touch — see Section 5). See `Business_Rules.md` R53 (rewritten), R58, `CLAUDE.md` Section 4 and Section 12.*
 
 **`farmers`** (Phase 1A) — permanent
-`id` PK · `name` string req · `address` string req · `mobile` string req, indexed · **`mh_number` string, unique, nullable** *(added back 2026-08-11 — Maharashtra farmer registration number, per farmer, not per plot; CEO confirmed)* · `status` enum(active, inactive) · `created_at`, `updated_at`
+`id` PK · `name` string req · `address` string req · `mobile` string req, indexed · ~~**`mh_number` string, unique, nullable**~~ *(added back 2026-08-11 — Maharashtra farmer registration number, per farmer, not per plot; CEO confirmed)* · `status` enum(active, inactive) · `created_at`, `updated_at`
 *Note (rewritten 2026-08-11): the MH registration number lives on this table, not on `plots`. This reverses an earlier "correction" (see prior revision history below) that moved it to the plot level based on APEDA/NRC Grapes documentation — that documentation suggests plot-level registration, but CEO confirmation overrides it: Reliable Fresh's actual practice is one MH number per farmer. See `Business_Rules.md` R2, R7a.*
 *Superseded note, kept for history: "no MH identifier lives on this table — the MH registration number is a plot-level APEDA identifier only. See `plots.mh_registration_number`." — no longer correct as of 2026-08-11.*
+
+> ⚠️ **DOCUMENTATION CONFLICT — UNRESOLVED, marked not fixed (2026-09-02).** The paragraphs directly above describe the 2026-08-11 "CEO confirmed farmer-level" decision as settled. It is not settled. The live code contradicts it: `backend/app/models/farmer.py`'s `Farmer` class has no `mh_number` column at all, and `backend/app/models/plot.py`'s `Plot` class has `mh_registration_number = Column(String, unique=True, nullable=True)` — confirmed by reading both files directly, not inferred. The code follows the **per-plot** model, i.e. the *opposite* of what this section and `CLAUDE.md` Discovery 8 both narrate as resolved. This is pending an APEDA registration certificate from the client — see `Open_Questions.md` Q16. Do not treat either version as authoritative until that's resolved. See the matching flag in Section 9's "New information" table below, and do not read this note as itself the resolution — it isn't one.
 
 **`bank_details`** (Phase 1B) — 1:1 with farmer
 `id` PK · `farmer_id` FK→farmers, unique · `account_holder_name` string · `bank_name` string · `account_number` string · `ifsc_code` string · `branch_name` string, optional · `passbook_photo_url` string · `created_at`, `updated_at`
@@ -290,7 +302,7 @@ Unique constraint: `(user_id, phase_key)`
 **`plots`** (Phase 2) — permanent, persists across seasons
 `id` PK · `farmer_id` FK→farmers · `plot_number` string (unique within farmer, R5) · ~~`mh_registration_number` string, unique~~ ~~`variety` enum~~ · `area_acres` decimal · `village` string · `taluka` string · `survey_no` string · `gps_lat`, `gps_long` decimal · `pruning_date` date · `approx_harvest_date` date · `created_at`, `updated_at`
 *Note (rewritten 2026-08-11): two columns removed from this table.*
-*1. `mh_registration_number` — removed; MH number is farmer-level as of 2026-08-11, see `farmers.mh_number` above.*
+*1. `mh_registration_number` — this note (and the strikethrough above) describe the 2026-08-11 decision, which the actual code does not follow — see the conflict flag under the `farmers` table above. `plots.mh_registration_number` is live in `backend/app/models/plot.py` today; it was never actually removed.*
 *2. `variety` — removed; a plot can contain multiple grape varieties. Variety is now registered per-plot via the new `plot_varieties` table below, not as a plot column. (Superseded note: an earlier revision of this document said variety instead lives on `harvests` — that was corrected the same day, see `plot_varieties` and the `harvests` entry below.)*
 *`num_trees` remains explicitly dropped — not tracked (unrelated, pre-existing decision).*
 
@@ -367,7 +379,7 @@ Unique constraint: `(plot_id, variety_name)`
 
 ### Purchase Order (Phase 12) — ⚠️ DROPPED 2026-08-11, standalone, farm inputs only
 
-**CEO confirmed no fertilizer purchases. This module is out of scope entirely.** The two tables below exist in the database but are unused and will be removed in a future migration. Kept here for historical reference only — do not build or expose this module (`CLAUDE.md` Section 12).
+**CEO confirmed no fertilizer purchases. This module is out of scope entirely.** The two tables below exist in the database but are unused; the router itself is unregistered from `app/main.py` as of 2026-09-01 (every `/purchase-orders/*` route now 404s), and the router file/tables are pending removal. Kept here for historical reference only — do not build or expose this module (`CLAUDE.md` Section 12).
 
 **`purchase_orders`**
 `id` PK · `po_number` string unique (format `RF-PO##/YYYY-YY`, auto-incremented) · `po_date` date · `payment_terms` string · `supplier_ref` string · `other_refs` string · `dispatch_through` string, default 'Road Transport' · `destination` string · `supplier_name` string · `supplier_address` text · `supplier_email` string · `supplier_gst` string · `assessable_value` decimal (calculated) · `cgst_total` decimal (calculated) · `sgst_total` decimal (calculated) · `freight` string ("At Actual" or a number) · `other_charges` decimal, default 0 · `grand_total` decimal (calculated) · `total_in_words` string (auto-generated, Indian Lac/Crore format) · `status` enum(draft, issued, completed) · `created_by` FK→users · `created_at`, `updated_at`
@@ -383,9 +395,22 @@ Proposed: `id` PK · `company_name` string · `company_address` text · `company
 **`customers`** — replaces the plain-string `customer_name` (on `packaging_records`) and `customer` (on `item_master_products`) columns from the original drafts. Needed for real cascading dropdowns and BOM lookups (variety → customer → pack size), not string matching.
 Proposed: `id` PK · `name` string unique · `code` string, optional · `is_active` boolean, default true · `created_at`, `updated_at`
 
+### Reports & Export Documents — scope confirmed 2026-09-01, schema NOT yet designed
+
+CEO confirmed what the `reports_documents` phase (Section 5, `user_phase_access`) actually gates, going forward: the real export document **images/files** per shipment — fumigation certificate, phytosanitary certificate, certificate of origin, AGMARK, packing list, and other shipment-specific certificates. These attach to specific entities (a pallet, a container, a shipment — clicking through to one of those shows its documents), stored in Cloudinary the same way every other upload in this system already is (passbook photos, lab seal photos, weighing slips). Access is phase-gated.
+
+**This is scope, not a design** — no table, no columns, no entity relationships below. Deliberately not started until the questions below are answered; see `Open_Questions.md` Q15 for the full list, added 2026-09-01:
+- Which entity does each document type attach to (pallet? container? a shipment concept that doesn't exist as a table yet)? Different types may attach at different levels.
+- Is it one document per type, or many (reissued/corrected certificates)?
+- Who uploads them — system-generated, Office Worker upload after receiving from a certifying body, or both depending on type?
+- Are they needed before or after shipping — does this ever gate a status transition the way QC stages do, or is it purely a reference attachment?
+
+Once these are answered, this becomes a real subsection here with a table definition, the same way `company_settings`/`customers` moved from "decided, not built" to fully specified.
+
 ### Deferred to future (unscoped) phases — not designed here, just named
-`container_indent_requests`, `container_loading`, `farmer_invoices`, `export_documents`, `suppliers` (denormalized autocomplete, referenced by Stock In and, formerly, PO supplier fields — the PO half of that is moot now that Phase 12 is dropped, but Stock In autocomplete still applies).
+`container_indent_requests`, `container_loading`, `farmer_invoices`, `suppliers` (denormalized autocomplete, referenced by Stock In and, formerly, PO supplier fields — the PO half of that is moot now that Phase 12 is dropped, but Stock In autocomplete still applies).
 *`finished_goods_qc` moved out of this list 2026-08-11 — it now has a confirmed position (Phase 13, between Palletisation and Pre-Cooling) even though its column-level fields are still pending design. See the Phase 13 entry above.*
+*`export_documents` moved out of this list 2026-09-01 — it now has confirmed scope (see the subsection immediately above) even though, unlike Finished Goods QC, it has no confirmed schema or even entity-attachment model yet. Genuinely earlier-stage than Finished Goods QC was; don't read the two notes as equivalent.*
 
 ---
 
@@ -430,7 +455,7 @@ This table is what seeds `item_master_products` (Phase 9A) and, until Phase 9A i
 ## 9. Open Items Summary
 
 ### CEO questions that could change the build
-Full detail in `Open_Questions.md` (14 items). None block Phases 1–8.
+Full detail in `Open_Questions.md` (16 items as of 2026-09-02). None block Phases 1–8.
 
 | # | Question | Affects | Status |
 |---|---|---|---|
@@ -448,6 +473,8 @@ Full detail in `Open_Questions.md` (14 items). None block Phases 1–8.
 | 12 | Does packing-material ordering use the same formal PO process (HSN/GST) as farm inputs, or informal ordering? | ~~Phase 12 scope~~ | **✅ RESOLVED 2026-08-11** — moot, PO module dropped entirely |
 | 13 | Is Finished Goods QC the same check as "Cold Storage Exit QC" (R21), or two separate inspections? | Phase 13 | **✅ RESOLVED 2026-08-11** — same check, position confirmed |
 | 14 | Does per-box-at-packing / per-container-at-loading material deduction timing match real practice? | Phase 9B | Open |
+| 15 | Export document attachment model — which entity does each document type attach to, one-per-type or many, who uploads, before or after shipping? *(added 2026-09-01)* | Export Documents | Open — scope confirmed (see Section 7), attachment model not yet designed |
+| 16 | MH registration number — farmer-level or plot-level? Section 7 narrates farmer-level as CEO-confirmed; the tail "New information" section says plot-level; the live code follows plot-level. Conflict marked in both locations, not resolved. *(added 2026-09-02)* | Farmer/Plot data model (R2/R7a) | Open — pending an APEDA registration certificate from the client |
 
 ### Resolved during phase-map review (2026-08-07)
 Captured here as a decision log so context isn't lost now that the working drafts have been removed:
@@ -1145,6 +1172,8 @@ The PO is saved in the system and can be reprinted, emailed, or downloaded as PD
 
 
 ## New information
+
+> ⚠️ **The MH-number row below conflicts with Section 7's `farmers`/`plots` table definitions (marked there, not resolved, 2026-09-02).** Section 7 narrates the 2026-08-11 "CEO confirmed farmer-level" decision as settled; this row says the opposite — MH number is per plot. The live code follows *this* row, not Section 7: `backend/app/models/farmer.py` has no `mh_number` column, `backend/app/models/plot.py` has `mh_registration_number`. Neither section is authoritative — this is pending an APEDA registration certificate from the client, see `Open_Questions.md` Q16. Don't read this table as the resolution just because the code currently agrees with it; it was never confirmed against Section 7's conflicting claim.
 
 | Finding | Impact | Priority |
 |---|---|---|
