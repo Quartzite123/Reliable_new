@@ -60,7 +60,8 @@ class PlotRead(ORMModel):
     farmer_id: int
     plot_number: str
     mh_registration_number: str | None
-    variety: str | None
+    variety: str | None  # legacy/denormalized — see models/plot.py's comment on the column
+    variety_names: list[str] = []  # authoritative — every variety this plot carries (plot_varieties)
     area_acres: Decimal | None
     village: str | None
     taluka: str | None
@@ -77,7 +78,12 @@ class PlotRead(ORMModel):
 class SeasonRegistrationCreate(BaseModel):
     season_year: int = Field(ge=2020, le=2100)
     season_id: int | None = None  # FK to seasons table (preferred over season_year)
-    plot_variety_id: int | None = None  # FK to plot_varieties — per-variety pipeline (R57)
+    # Required as of 2026-09-03 (alembic 9d2f6a1c8b3e made the DB column
+    # NOT NULL) — was Optional, which let a caller omit it and hit a
+    # confusing DB-level IntegrityError instead of a clean 422. Every
+    # registration is for a specific variety now, including the
+    # single-variety case (one plot_varieties row at minimum per plot).
+    plot_variety_id: int = Field(description="FK to plot_varieties — per-variety pipeline (R57)")
 
 
 class SeasonRegistrationRead(ORMModel):
@@ -85,7 +91,8 @@ class SeasonRegistrationRead(ORMModel):
     plot_id: int
     season_year: int
     season_id: int | None = None
-    plot_variety_id: int | None = None
+    plot_variety_id: int
+    variety_name: str | None = None  # authoritative source for every reader — see models/plot.py
     status: RegistrationStatus
     registered_by: int
     registered_at: datetime

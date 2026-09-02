@@ -70,7 +70,13 @@ export const contractsApiReal = {
       .map((r): EligiblePlotForContract | null => {
         const context = resolveContext(r, plots, farmers)
         if (!context) return null
-        return { seasonRegistrationId: r.id, farmerName: context.farmer.name, plotNumber: context.plot.plotNumber, seasonYear: r.seasonYear }
+        return {
+          seasonRegistrationId: r.id,
+          farmerName: context.farmer.name,
+          plotNumber: context.plot.plotNumber,
+          variety: r.varietyName,
+          seasonYear: r.seasonYear,
+        }
       })
       .filter((row): row is EligiblePlotForContract => row !== null)
   },
@@ -95,6 +101,7 @@ export const contractsApiReal = {
       farmerId: farmer.id,
       farmerName: farmer.name,
       plotNumber: plot.plotNumber,
+      variety: registration.varietyName,
       seasonYear: registration.seasonYear,
     }
   },
@@ -115,7 +122,13 @@ export const contractsApiReal = {
         }
         const context = resolveContext(registration, plots, farmers)
         if (!context) return null
-        return { contract, farmerName: context.farmer.name, plotNumber: context.plot.plotNumber, seasonYear: registration.seasonYear }
+        return {
+          contract,
+          farmerName: context.farmer.name,
+          plotNumber: context.plot.plotNumber,
+          variety: registration.varietyName,
+          seasonYear: registration.seasonYear,
+        }
       })
       .filter((row): row is ContractRow => row !== null)
   },
@@ -125,7 +138,13 @@ export const contractsApiReal = {
     const contract = contracts.find((c) => c.id === id)
     if (!contract) throw new Error('Contract not found.')
     const { plot, farmer, registration } = await loadContext(contract.seasonRegistrationId)
-    return { contract, farmerName: farmer.name, plotNumber: plot.plotNumber, seasonYear: registration.seasonYear }
+    return {
+      contract,
+      farmerName: farmer.name,
+      plotNumber: plot.plotNumber,
+      variety: registration.varietyName,
+      seasonYear: registration.seasonYear,
+    }
   },
 
   // No rejectionPercent in the body — the backend defaults it to 7.00

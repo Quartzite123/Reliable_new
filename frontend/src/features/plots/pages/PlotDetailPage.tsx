@@ -41,7 +41,7 @@ export function PlotDetailPage() {
   return (
     <>
       <PageHeader
-        title={`${plot.plotNumber} — ${plot.variety}`}
+        title={`${plot.plotNumber} — ${plot.varietyNames?.length ? plot.varietyNames.join(', ') : plot.variety ?? '—'}`}
         description={`MH Registration Number ${plot.mhRegistrationNumber} · ${plot.village}, ${plot.taluka}`}
       />
 
@@ -75,7 +75,14 @@ export function PlotDetailPage() {
         const failed = registration.status === 'Field QC Failed'
 
         return (
-          <SectionCard key={registration.id} title={`Field QC — Season ${registration.seasonYear}`}>
+          <SectionCard
+            key={registration.id}
+            title={
+              registration.varietyName
+                ? `Field QC — Season ${registration.seasonYear} — ${registration.varietyName}`
+                : `Field QC — Season ${registration.seasonYear}`
+            }
+          >
             <div className="flex flex-col gap-3">
               {qcHistory.map((qc) => (
                 <div key={qc.id} className="rounded-lg border border-gray-200 p-3">

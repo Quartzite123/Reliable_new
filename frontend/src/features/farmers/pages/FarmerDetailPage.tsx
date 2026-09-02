@@ -110,7 +110,7 @@ export function FarmerDetailPage() {
                 >
                   <div>
                     <p className="font-medium text-gray-900">
-                      {plot.plotNumber} — {plot.variety}
+                      {plot.plotNumber} — {plot.varietyNames?.length ? plot.varietyNames.join(', ') : plot.variety}
                     </p>
                     <p className="text-sm text-gray-500">{plot.village}</p>
                   </div>

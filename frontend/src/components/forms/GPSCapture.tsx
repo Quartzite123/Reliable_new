@@ -1,4 +1,5 @@
 import { useGeolocation } from '@/hooks/useGeolocation'
+import { useToast } from '@/app/ToastContext'
 
 interface GPSCaptureProps {
   value: { latitude: number; longitude: number } | null
@@ -8,6 +9,7 @@ interface GPSCaptureProps {
 /** Plot GPS capture — free browser Geolocation API only, no paid map service (CLAUDE.md §9/§10). */
 export function GPSCapture({ value, onCapture }: GPSCaptureProps) {
   const { state, position, error, capture } = useGeolocation()
+  const { showToast } = useToast()
 
   const displayed = position ?? value
 
@@ -39,7 +41,10 @@ export function GPSCapture({ value, onCapture }: GPSCaptureProps) {
       {position && (
         <button
           type="button"
-          onClick={() => onCapture(position)}
+          onClick={() => {
+            onCapture(position)
+            showToast('Location added to the form.', 'success')
+          }}
           className="mt-3 min-h-11 rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800"
         >
           Use this location

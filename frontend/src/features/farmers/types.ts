@@ -5,7 +5,8 @@ export type FarmerStatus = 'active' | 'inactive'
 export interface PlotSummary {
   id: EntityId
   plotNumber: string
-  variety: string | null
+  /** All varieties this plot carries — a plot can have more than one (plot_varieties). Not currently rendered anywhere in this feature (see features/plots' own PlotSummary, used instead by FarmerDetailPage). */
+  varietyNames: string[]
   areaAcres: string | null
   village: string | null
 }

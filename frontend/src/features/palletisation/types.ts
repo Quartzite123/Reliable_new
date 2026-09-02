@@ -37,6 +37,8 @@ export interface AvailableLot {
   packagingRecordId: EntityId
   lotId: string
   farmerName: string
+  /** A pallet can hold boxes from more than one lot (R35) — shown per lot, not per pallet, since a pallet has no single variety. */
+  variety?: string
   customerName: string
   packSize: string
   totalBoxes: number
@@ -51,5 +53,5 @@ export interface PalletRow {
 
 export interface PalletDetail {
   pallet: Pallet
-  lots: Array<{ lot: PalletisationLot; lotId: string; farmerName: string; customerName: string }>
+  lots: Array<{ lot: PalletisationLot; lotId: string; farmerName: string; variety?: string; customerName: string }>
 }

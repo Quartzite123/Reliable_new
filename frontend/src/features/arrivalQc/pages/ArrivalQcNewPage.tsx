@@ -49,7 +49,7 @@ function EligibleHarvestPicker({ onPick }: { onPick: (harvestId: EntityId) => vo
                 <div>
                   <p className="font-semibold text-gray-900">{row.farmerName}</p>
                   <p className="text-sm text-gray-500">
-                    {row.plotNumber} · Harvested {row.harvestDate} · Season {row.seasonYear}
+                    {row.plotNumber}{row.variety ? ` — ${row.variety}` : ''} · Harvested {row.harvestDate} · Season {row.seasonYear}
                   </p>
                 </div>
                 <span className="text-sm font-semibold text-brand-700">Inspect</span>

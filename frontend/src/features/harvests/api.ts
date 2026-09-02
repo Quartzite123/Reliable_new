@@ -85,7 +85,9 @@ export const harvestsApiReal = {
           farmerName: context.farmer.name,
           plotNumber: context.plot.plotNumber,
           seasonYear: r.seasonYear,
-          variety: context.plot.variety as GrapeVariety,
+          // Registration-scoped, not plot.variety (legacy) — a plot can
+          // carry more than one variety.
+          variety: r.varietyName as GrapeVariety,
         }
       })
       .filter((row): row is EligiblePlotForHarvest => row !== null)

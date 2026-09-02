@@ -49,6 +49,17 @@ class Plot(Base):
     # APEDA/NRC Grapes plot-level registration number (e.g. MH06081011112).
     # Assigned per plot, not per farmer. Each plot has its own unique number.
     mh_registration_number = Column(String, unique=True, nullable=True)
+    # LEGACY / DENORMALIZED (2026-09-03) — kept in place, still required on
+    # the plot registration form, still populated on every write. The
+    # authoritative source for variety is now plot_varieties, one row per
+    # variety the plot carries, each tied to its own season_registration via
+    # plot_variety_id. This column is NOT yet dead: as of this comment,
+    # weighing.py:77 and several frontend client-side joins still read it
+    # directly instead of going through plot_variety — that reader-switch is
+    # the next piece of work, not done yet. Once every reader has moved off
+    # it and that's proven in practice, this column is a candidate for
+    # removal in a later, separate migration — do not remove it as part of
+    # any change that hasn't first confirmed every reader no longer needs it.
     variety = Column(String, nullable=True)  # see module docstring — no Variety enum exists
     area_acres = Column(Numeric, nullable=True)
     village = Column(String, nullable=True)
@@ -65,19 +76,35 @@ class Plot(Base):
     plot_varieties = relationship("PlotVariety", back_populates="plot")
     season_registrations = relationship("SeasonRegistration", back_populates="plot")
 
+    @property
+    def variety_names(self) -> list[str]:
+        """All varieties this plot carries, for plot-level display (title,
+        list columns) where there's no specific registration in view to
+        resolve a single variety from. Picked up automatically by any
+        *Read schema declaring a `varieties` field (Pydantic reads it via
+        from_attributes, same as User.phases -> UserRead.phases)."""
+        return [pv.variety_name for pv in self.plot_varieties]
+
 
 class SeasonRegistration(Base):
     __tablename__ = "season_registrations"
     __table_args__ = (
-        UniqueConstraint("plot_id", "season_year", name="uq_season_registrations_plot_season"),
+        # Was (plot_id, season_year) — moved 2026-09-03 (see alembic
+        # 9d2f6a1c8b3e) so a plot with two varieties can carry two
+        # registrations in the same season, one per variety. plot_id stays
+        # on the row (denormalized, derivable via plot_variety.plot_id) but
+        # no longer participates in the uniqueness guarantee.
+        UniqueConstraint("plot_variety_id", "season_year", name="uq_season_registrations_plot_variety_season"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     plot_id = Column(Integer, ForeignKey("plots.id"), nullable=False)
     season_year = Column(Integer, nullable=False)  # legacy — kept for backward compat
-    # --- new FKs (added alongside legacy columns; nullable until data is backfilled) ---
-    season_id = Column(Integer, ForeignKey("seasons.id"), nullable=True)
-    plot_variety_id = Column(Integer, ForeignKey("plot_varieties.id"), nullable=True)
+    season_id = Column(Integer, ForeignKey("seasons.id"), nullable=True)  # pending — not yet backfilled/required
+    # Required as of 2026-09-03 (alembic 9d2f6a1c8b3e) — every registration
+    # is now for a specific variety, including the single-variety case (one
+    # plot_varieties row per plot at minimum). See plot_variety.py.
+    plot_variety_id = Column(Integer, ForeignKey("plot_varieties.id"), nullable=False)
     status = Column(
         SAEnum(RegistrationStatus, name="registration_status", values_callable=_values), nullable=False
     )
@@ -89,6 +116,17 @@ class SeasonRegistration(Base):
     plot = relationship("Plot", back_populates="season_registrations")
     season = relationship("Season", back_populates="season_registrations")
     plot_variety = relationship("PlotVariety", back_populates="season_registrations")
+
+    @property
+    def variety_name(self) -> str | None:
+        """The authoritative, registration-scoped variety — added 2026-09-03
+        as the single source every reader (weighing, lab samples, packaging,
+        harvests, arrival QC, contracts, palletisation, season registrations
+        list) switches to, instead of each independently reading
+        plots.variety (legacy — see that column's comment in this file).
+        Picked up automatically by SeasonRegistrationRead.variety_name via
+        Pydantic's from_attributes, same mechanism as User.phases."""
+        return self.plot_variety.variety_name if self.plot_variety else None
     registered_by_user = relationship(
         "User", back_populates="season_registrations_registered", foreign_keys=[registered_by]
     )

@@ -8,6 +8,8 @@ import { EmptyState } from '@/components/data/EmptyState'
 import { FormField } from '@/components/forms/FormField'
 import { NumberInput } from '@/components/forms/NumberInput'
 import { Select } from '@/components/forms/Select'
+import { useToast } from '@/app/ToastContext'
+import { toFriendlyMessage } from '@/utils/errorMessages'
 import { useProducts } from '@/features/itemMaster/hooks'
 import { useLowStockAlerts, useOrderCalculator } from '../hooks'
 import type { MaterialStockLevel, OrderCalcLine } from '../types'
@@ -15,9 +17,22 @@ import type { MaterialStockLevel, OrderCalcLine } from '../types'
 export function AlertsPage() {
   const { data, isLoading, error, refetch } = useLowStockAlerts()
   const { data: products } = useProducts()
+  const { showToast } = useToast()
   const orderCalculator = useOrderCalculator()
   const [productId, setProductId] = useState<number | undefined>()
   const [numContainers, setNumContainers] = useState<number | undefined>()
+
+  // Matches OrderCalculatorPage.tsx's onCalculate — a failed request must
+  // never render identically to a successful empty result (same failure
+  // mode as the lab-sampling query-side bug, on the mutation side).
+  const handleCalculate = async () => {
+    if (!productId || !numContainers) return
+    try {
+      await orderCalculator.mutateAsync({ productId, numContainers })
+    } catch (error) {
+      showToast(toFriendlyMessage(error), 'error')
+    }
+  }
 
   const columns: DataTableColumn<MaterialStockLevel>[] = [
     { key: 'material', header: 'Material', render: (l) => l.materialLabel, isPrimary: true },
@@ -64,7 +79,7 @@ export function AlertsPage() {
             <button
               type="button"
               disabled={!productId || !numContainers || orderCalculator.isPending}
-              onClick={() => productId && numContainers && orderCalculator.mutate({ productId, numContainers })}
+              onClick={handleCalculate}
               className="min-h-11 rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60"
             >
               {orderCalculator.isPending ? 'Calculating...' : 'Calculate'}

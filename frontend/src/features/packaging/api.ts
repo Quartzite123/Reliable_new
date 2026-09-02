@@ -2,7 +2,7 @@ import { ApiError, httpClient } from '@/api/httpClient'
 import type { EntityId } from '@/types/common'
 import type { Customer } from '@/features/customers'
 import type { Farmer } from '@/features/farmers'
-import type { FieldQc, Plot, SeasonRegistration } from '@/features/plots'
+import type { FieldQc, GrapeVariety, Plot, SeasonRegistration } from '@/features/plots'
 import type { LabSample } from '@/features/labSamples'
 import type { Harvest } from '@/features/harvests'
 import type {
@@ -82,7 +82,11 @@ export const packagingApiReal = {
         harvestId: harvest.id,
         farmerName: farmer.name,
         plotNumber: plot.plotNumber,
-        variety: plot.variety,
+        // Registration-scoped, not plot.variety (legacy) — also feeds the
+        // cascading customer/pack-size dropdown on PackagingNewPage, so
+        // getting this wrong on a two-variety plot is a functional bug,
+        // not just a display one.
+        variety: registration.varietyName as GrapeVariety | undefined,
         harvestDate: harvest.harvestDate,
         packingRunsSoFar: packaging.filter((p) => p.harvestId === harvest.id).length,
       })

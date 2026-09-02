@@ -19,10 +19,19 @@ import type { AvailableLot, CreatePalletInput, Pallet, PalletDetail, PalletRow }
  * call, and was called once per lot inside two separate loops — an N×M
  * pattern, not just N+1. Replaced with one bulk resolution per top-level
  * call: fetch registrations/plots/farmers once, fetch each registration's
- * harvests in parallel, and build a harvestId -> farmerName map so the
- * per-lot loops become plain synchronous lookups.
+ * harvests in parallel, and build a harvestId -> {farmerName, variety} map
+ * so the per-lot loops become plain synchronous lookups.
+ *
+ * variety is included per-harvest (not per-pallet) deliberately — a pallet
+ * can hold boxes from more than one lot (R35), so it has no single variety
+ * of its own; each lot it's made of does.
  */
-async function loadFarmerNamesByHarvest(): Promise<Map<EntityId, string>> {
+interface HarvestContext {
+  farmerName: string
+  variety?: string
+}
+
+async function loadFarmerNamesByHarvest(): Promise<Map<EntityId, HarvestContext>> {
   const [registrations, plots, farmers] = await Promise.all([
     httpClient.get<SeasonRegistration[]>('/registrations'),
     httpClient.get<Plot[]>('/plots'),
@@ -30,7 +39,7 @@ async function loadFarmerNamesByHarvest(): Promise<Map<EntityId, string>> {
   ])
 
   const perRegistration = await Promise.all(
-    registrations.map(async (registration): Promise<Array<readonly [EntityId, string]>> => {
+    registrations.map(async (registration): Promise<Array<readonly [EntityId, HarvestContext]>> => {
       const harvests = await httpClient.get<Harvest[]>(`/registrations/${registration.id}/harvests`)
       const plot = plots.find((p) => p.id === registration.plotId)
       if (!plot) {
@@ -42,7 +51,8 @@ async function loadFarmerNamesByHarvest(): Promise<Map<EntityId, string>> {
         console.warn(`[palletisation] registration ${registration.id}: farmer ${plot.farmerId} not found in /farmers — skipping`)
         return []
       }
-      return harvests.map((h) => [h.id, farmer.name] as const)
+      const context: HarvestContext = { farmerName: farmer.name, variety: registration.varietyName }
+      return harvests.map((h) => [h.id, context] as const)
     }),
   )
 
@@ -69,10 +79,12 @@ export const palletisationApiReal = {
       const remainingBoxes = record.numBoxes - (assigned.get(record.id) ?? 0)
       if (remainingBoxes <= 0) continue
       const customer = customers.find((c) => c.id === record.customerId)
+      const harvestContext = farmerNames.get(record.harvestId)
       rows.push({
         packagingRecordId: record.id,
         lotId: record.lotId,
-        farmerName: farmerNames.get(record.harvestId) ?? 'Unknown',
+        farmerName: harvestContext?.farmerName ?? 'Unknown',
+        variety: harvestContext?.variety,
         customerName: customer?.name ?? 'Unknown',
         packSize: record.packSize,
         totalBoxes: record.numBoxes,
@@ -98,10 +110,12 @@ export const palletisationApiReal = {
     const lots = pallet.lots.map((lot) => {
       const record = records.find((r) => r.id === lot.packagingRecordId)
       const customer = record && customers.find((c) => c.id === record.customerId)
+      const harvestContext = record ? farmerNames.get(record.harvestId) : undefined
       return {
         lot,
         lotId: record?.lotId ?? 'Unknown lot',
-        farmerName: record ? farmerNames.get(record.harvestId) ?? 'Unknown' : 'Unknown',
+        farmerName: harvestContext?.farmerName ?? 'Unknown',
+        variety: harvestContext?.variety,
         customerName: customer?.name ?? 'Unknown',
       }
     })

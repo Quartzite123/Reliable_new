@@ -47,7 +47,10 @@ class PlotSummary(ORMModel):
 
     id: int
     plot_number: str
-    variety: str | None
+    # A plot can carry more than one variety (plot_varieties) — a single
+    # `variety` value here would be arbitrary about which one to show.
+    # Sourced from Plot.variety_names, same property PlotRead uses.
+    variety_names: list[str] = []
     area_acres: Decimal | None
     village: str | None
 

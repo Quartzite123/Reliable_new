@@ -98,6 +98,7 @@ export function PalletisationNewPage() {
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">
                         Lot {lot.lotId} — {lot.farmerName}
+                        {lot.variety ? ` (${lot.variety})` : ''}
                       </p>
                       <p className="text-sm text-gray-500">
                         {lot.customerName} · {lot.packSize} · {lot.remainingBoxes} boxes available

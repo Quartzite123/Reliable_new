@@ -16,12 +16,15 @@ export function ArrivalQcDetailPage() {
   if (error) return <ErrorState error={error} onRetry={() => refetch()} />
   if (!data) return null
 
-  const { farmerName, plotNumber, harvestDate, record } = data
+  const { farmerName, plotNumber, variety, harvestDate, record } = data
   const failed = record?.result === 'Fail'
 
   return (
     <>
-      <PageHeader title={`Arrival QC — ${farmerName}`} description={`${plotNumber} · Harvested ${harvestDate}`} />
+      <PageHeader
+        title={`Arrival QC — ${farmerName}`}
+        description={`${plotNumber}${variety ? ` — ${variety}` : ''} · Harvested ${harvestDate}`}
+      />
 
       <SectionCard title="Inspection">
         {record ? (

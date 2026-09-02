@@ -54,7 +54,7 @@ function EligiblePlotPicker({ onPick }: { onPick: (seasonRegistrationId: EntityI
                 <div>
                   <p className="font-semibold text-gray-900">{row.farmerName}</p>
                   <p className="text-sm text-gray-500">
-                    {row.plotNumber} · Season {row.seasonYear}
+                    {row.plotNumber}{row.variety ? ` — ${row.variety}` : ''} · Season {row.seasonYear}
                   </p>
                 </div>
                 <span className="text-sm font-semibold text-brand-700">Create contract</span>
@@ -104,7 +104,10 @@ function ContractForm({
 
   return (
     <>
-      <PageHeader title="New Contract" description={`${prereqs.farmerName} — ${prereqs.plotNumber} · Season ${prereqs.seasonYear}`} />
+      <PageHeader
+        title="New Contract"
+        description={`${prereqs.farmerName} — ${prereqs.plotNumber}${prereqs.variety ? ` — ${prereqs.variety}` : ''} · Season ${prereqs.seasonYear}`}
+      />
 
       <PrerequisitePanel
         items={[

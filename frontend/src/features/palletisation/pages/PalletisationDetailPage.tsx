@@ -26,10 +26,13 @@ export function PalletisationDetailPage() {
 
       <SectionCard title="Lots on this pallet" description="A pallet can span multiple lots from different farmers/customers (Business_Rules R35).">
         <ul className="flex flex-col gap-2">
-          {lots.map(({ lot, lotId, farmerName, customerName }) => (
+          {lots.map(({ lot, lotId, farmerName, variety, customerName }) => (
             <li key={lot.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
               <div>
-                <p className="font-medium text-gray-900">Lot {lotId}</p>
+                <p className="font-medium text-gray-900">
+                  Lot {lotId}
+                  {variety ? ` — ${variety}` : ''}
+                </p>
                 <p className="text-sm text-gray-500">
                   {farmerName} — {customerName}
                 </p>

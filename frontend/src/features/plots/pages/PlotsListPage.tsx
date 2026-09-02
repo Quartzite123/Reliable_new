@@ -16,7 +16,11 @@ export function PlotsListPage() {
 
   const columns: DataTableColumn<PlotSummary>[] = [
     { key: 'plotNumber', header: 'Plot', render: (row) => row.plot.plotNumber, isPrimary: true },
-    { key: 'variety', header: 'Variety', render: (row) => row.plot.variety },
+    {
+      key: 'variety',
+      header: 'Variety',
+      render: (row) => (row.plot.varietyNames?.length ? row.plot.varietyNames.join(', ') : (row.plot.variety ?? '—')),
+    },
     { key: 'village', header: 'Village', render: (row) => row.plot.village },
     {
       key: 'status',

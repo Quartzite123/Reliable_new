@@ -1,7 +1,7 @@
 import { ApiError, httpClient } from '@/api/httpClient'
 import type { EntityId } from '@/types/common'
 import type { Farmer } from '@/features/farmers'
-import type { Plot, SeasonRegistration } from '@/features/plots'
+import type { GrapeVariety, Plot, SeasonRegistration } from '@/features/plots'
 import type { CreateLabSampleInput, EligiblePlotForLab, LabSample, LabSampleReference, LabSampleRow } from './types'
 
 /**
@@ -20,18 +20,21 @@ import type { CreateLabSampleInput, EligiblePlotForLab, LabSample, LabSampleRefe
  * `plots/api.ts` and `seasonRegistrations/api.ts`. Never loop a per-row
  * `GET /plots/{id}` call; it will 405.
  */
-function toReference(plot: Plot, farmer: Farmer, seasonYear: number): LabSampleReference {
+function toReference(plot: Plot, farmer: Farmer, registration: SeasonRegistration): LabSampleReference {
   return {
     farmerName: farmer.name,
     plotNumber: plot.plotNumber,
     mhRegistrationNumber: plot.mhRegistrationNumber,
-    variety: plot.variety,
+    // Registration-scoped, not plot.variety (legacy) — a plot can carry
+    // more than one variety; this lab sample is for this registration's
+    // one variety specifically.
+    variety: registration.varietyName as GrapeVariety | undefined,
     village: plot.village,
     taluka: plot.taluka,
     surveyNo: plot.surveyNo,
     gpsLat: plot.gpsLat !== undefined ? Number(plot.gpsLat) : undefined,
     gpsLong: plot.gpsLong !== undefined ? Number(plot.gpsLong) : undefined,
-    seasonYear,
+    seasonYear: registration.seasonYear,
   }
 }
 
@@ -70,7 +73,7 @@ function buildReferenceFrom(
     )
     return null
   }
-  return toReference(plot, farmer, registration.seasonYear)
+  return toReference(plot, farmer, registration)
 }
 
 async function loadAllSamples(): Promise<LabSampleRow[]> {

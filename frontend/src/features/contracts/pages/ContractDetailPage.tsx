@@ -13,11 +13,14 @@ export function ContractDetailPage() {
   if (error) return <ErrorState error={error} onRetry={() => refetch()} />
   if (!data) return null
 
-  const { contract, farmerName, plotNumber, seasonYear } = data
+  const { contract, farmerName, plotNumber, variety, seasonYear } = data
 
   return (
     <>
-      <PageHeader title={`Contract — ${farmerName}`} description={`${plotNumber} · Season ${seasonYear}`} />
+      <PageHeader
+        title={`Contract — ${farmerName}`}
+        description={`${plotNumber}${variety ? ` — ${variety}` : ''} · Season ${seasonYear}`}
+      />
       <SectionCard title="Terms">
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>

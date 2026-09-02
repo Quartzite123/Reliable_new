@@ -34,7 +34,10 @@ export interface Plot extends Timestamped {
   farmerId: EntityId
   plotNumber: string
   mhRegistrationNumber?: string
+  /** @deprecated legacy/denormalized — still populated by the backend, but nothing reads it for display anymore. Use varietyNames (plot-level) or a registration's own varietyName (registration-scoped). */
   variety?: GrapeVariety
+  /** Every variety this plot carries (plot_varieties) — authoritative, plot-level. */
+  varietyNames?: string[]
   areaAcres?: string
   village?: string
   taluka?: string
@@ -49,11 +52,23 @@ export interface Plot extends Timestamped {
 export interface SeasonRegistration extends Timestamped {
   id: EntityId
   plotId: EntityId
+  plotVarietyId?: EntityId
+  /** The authoritative variety for this specific registration — every registration-scoped screen (weighing, lab samples, packaging, harvests, arrival QC, contracts, palletisation, this list) reads this, not plot.variety. */
+  varietyName?: string
   seasonYear: number
   status: SeasonRegistrationStatus
   registeredBy: EntityId
   registeredAt: string
   notes?: string
+}
+
+/** A single variety a plot carries (plot_varieties) — one per registration pipeline (R57). */
+export interface PlotVariety {
+  id: EntityId
+  plotId: EntityId
+  varietyName: string
+  areaAcres?: string
+  createdAt: string
 }
 
 export type FruitColour = 'Green' | 'Milky Green' | 'Yellow'

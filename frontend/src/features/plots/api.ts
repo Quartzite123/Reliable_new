@@ -6,6 +6,7 @@ import type {
   Plot,
   PlotDetail,
   PlotSummary,
+  PlotVariety,
   RegisterPlotWithFieldQcInput,
   SeasonRegistration,
 } from './types'
@@ -78,11 +79,33 @@ export const plotsApiReal = {
   },
 
   /**
-   * Three sequential real calls, composed into the one action the combined
+   * Finds the plot_variety matching `varietyName` on this plot, or creates
+   * it if none exists yet. Re-registering an existing plot for a new
+   * season will almost always find a match (from the prior season); a
+   * brand-new plot never does. Never blindly POST — the backend 409s on a
+   * duplicate (plot_id, variety_name), which would otherwise fire on every
+   * single re-registration of the same variety.
+   */
+  async ensurePlotVariety(plotId: EntityId, varietyName: string): Promise<PlotVariety> {
+    const existing = await httpClient.get<PlotVariety[]>(`/plots/${plotId}/varieties`)
+    const match = existing.find((v) => v.varietyName === varietyName)
+    if (match) return match
+    return httpClient.post<PlotVariety>(`/plots/${plotId}/varieties`, { varietyName })
+  },
+
+  /**
+   * Four sequential real calls, composed into the one action the combined
    * Plot + Field QC screen submits (prompt Section 5B):
    *   1. POST /plots                          (create or the caller already has plotId)
-   *   2. POST /plots/{plot_id}/register        (season registration)
-   *   3. POST /registrations/{reg_id}/field-qc (the inspection itself)
+   *   2. POST /plots/{plot_id}/varieties       (find-or-create the plot_variety — added 2026-09-03)
+   *   3. POST /plots/{plot_id}/register        (season registration, now requires plotVarietyId)
+   *   4. POST /registrations/{reg_id}/field-qc (the inspection itself)
+   *
+   * Still single-variety only — `input.variety` is the one dropdown value
+   * on today's form. Registering more than one variety on a plot in one
+   * visit is Pass 2 (a repeatable variety+area+field-QC section); this
+   * only restores the plumbing this call needed to keep working once
+   * season_registrations.plot_variety_id became required.
    */
   async registerWithFieldQc(
     input: RegisterPlotWithFieldQcInput,
@@ -116,8 +139,14 @@ export const plotsApiReal = {
           approxHarvestDate: emptyToUndefined(input.approxHarvestDate),
         })
 
+    if (!input.variety) {
+      throw new Error('A variety is required to register a plot.')
+    }
+    const plotVariety = await plotsApiReal.ensurePlotVariety(plot.id, input.variety)
+
     const registration = await httpClient.post<SeasonRegistration>(`/plots/${plot.id}/register`, {
       seasonYear: input.seasonYear,
+      plotVarietyId: plotVariety.id,
     })
 
     await httpClient.post<FieldQc>(`/registrations/${registration.id}/field-qc`, {

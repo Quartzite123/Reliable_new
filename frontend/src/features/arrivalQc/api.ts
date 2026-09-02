@@ -87,13 +87,14 @@ export const arrivalQcApiReal = {
     const all = await loadAllHarvestsWithContext()
     const eligible = all.filter((row) => row.registration.status === 'Weighed')
     const rows = await Promise.all(
-      eligible.map(async ({ harvest, registration, plot, farmer }) => {
+      eligible.map(async ({ harvest, registration, plot, farmer }): Promise<EligibleHarvestForArrivalQc | null> => {
         const record = await getArrivalQcRecord(harvest.id)
         if (record) return null
         return {
           harvestId: harvest.id,
           farmerName: farmer.name,
           plotNumber: plot.plotNumber,
+          variety: registration.varietyName,
           harvestDate: harvest.harvestDate,
           seasonYear: registration.seasonYear,
         }
@@ -105,10 +106,16 @@ export const arrivalQcApiReal = {
   async list(): Promise<ArrivalQcRow[]> {
     const all = await loadAllHarvestsWithContext()
     const rows = await Promise.all(
-      all.map(async ({ harvest, plot, farmer }) => {
+      all.map(async ({ harvest, registration, plot, farmer }): Promise<ArrivalQcRow | null> => {
         const record = await getArrivalQcRecord(harvest.id)
         if (!record) return null
-        return { record, farmerName: farmer.name, plotNumber: plot.plotNumber, harvestDate: harvest.harvestDate }
+        return {
+          record,
+          farmerName: farmer.name,
+          plotNumber: plot.plotNumber,
+          variety: registration.varietyName,
+          harvestDate: harvest.harvestDate,
+        }
       }),
     )
     return rows.filter((r): r is ArrivalQcRow => r !== null)
@@ -123,6 +130,7 @@ export const arrivalQcApiReal = {
       harvestId,
       farmerName: found.farmer.name,
       plotNumber: found.plot.plotNumber,
+      variety: found.registration.varietyName,
       harvestDate: found.harvest.harvestDate,
       record,
     }

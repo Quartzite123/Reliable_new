@@ -15,7 +15,7 @@ export function ArrivalQcListPage() {
 
   const columns: DataTableColumn<ArrivalQcRow>[] = [
     { key: 'farmer', header: 'Farmer', render: (r) => r.farmerName, isPrimary: true },
-    { key: 'plot', header: 'Plot', render: (r) => r.plotNumber },
+    { key: 'plot', header: 'Plot', render: (r) => (r.variety ? `${r.plotNumber} — ${r.variety}` : r.plotNumber) },
     { key: 'date', header: 'Inspection date', render: (r) => r.record.inspectionDate },
     { key: 'result', header: 'Result', render: (r) => <StatusBadge status={r.record.result === 'Pass' ? 'passed' : 'failed'} /> },
   ]

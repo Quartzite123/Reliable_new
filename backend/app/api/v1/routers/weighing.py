@@ -74,7 +74,7 @@ def _trip_with_context(trip: VehicleTrip) -> PendingTripRead:
         num_crates=trip.num_crates,
         approx_weight_kg=trip.approx_weight_kg,
         farmer_name=reg.plot.farmer.name,
-        variety=reg.plot.variety,
+        variety=reg.variety_name,
         harvest_date=trip.harvest.harvest_date,
     )
 

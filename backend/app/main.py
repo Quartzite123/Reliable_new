@@ -128,6 +128,20 @@ def _constraint_name(exc: IntegrityError) -> str | None:
     return match.group(1) if match else None
 
 
+# Postgres SQLSTATE classes for the integrity-error family (see
+# https://www.postgresql.org/docs/current/errcodes-appendix.html). The
+# handler below used to treat every IntegrityError as a uniqueness
+# conflict — a NOT NULL violation (missing required field) or a foreign
+# key violation (references something that doesn't exist) both fell
+# through to "That value is already in use.", which is actively wrong for
+# either case, not just imprecise. Found while debugging a NOT NULL
+# violation on season_registrations.plot_variety_id surfacing with that
+# exact misleading message (2026-09-03).
+_SQLSTATE_NOT_NULL = "23502"
+_SQLSTATE_FOREIGN_KEY = "23503"
+_SQLSTATE_UNIQUE = "23505"
+
+
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request: Request, exc: IntegrityError):
     # No explicit db.rollback() here: get_db()'s `finally: db.close()` has
@@ -139,8 +153,46 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
     # against the same session immediately after rollback succeeds, so the
     # connection is never left poisoned for whatever runs next.
     name = _constraint_name(exc)
+    sqlstate = getattr(exc.orig, "pgcode", None)
+    diag = getattr(exc.orig, "diag", None)
+
+    if sqlstate == _SQLSTATE_NOT_NULL:
+        # A required field was missing at the DB layer. This should mean a
+        # bug upstream (Pydantic validation is supposed to catch a missing
+        # required field first, as a 422, before it ever reaches the DB) —
+        # log the actual column so it's debuggable, but don't guess at a
+        # user-facing column name; "already in use" would be worse than
+        # generic-but-honest.
+        column = getattr(diag, "column_name", None)
+        logger.warning(
+            "NOT NULL violation on %s %s — column=%s constraint=%s",
+            request.method, request.url.path, column, name,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"message": "A required value was missing when saving. Please try again, and report this if it keeps happening."},
+        )
+
+    if sqlstate == _SQLSTATE_FOREIGN_KEY:
+        # References a row that doesn't exist (or was removed/deleted
+        # concurrently). Distinct from "already in use" — nothing about a
+        # foreign key violation means a duplicate.
+        logger.warning(
+            "Foreign key violation on %s %s — constraint=%s",
+            request.method, request.url.path, name,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"message": "That references something that doesn't exist or was removed. Please refresh and try again."},
+        )
+
+    # Unique violations (sqlstate 23505) and anything else land here —
+    # the original name-mapped-message behavior, unchanged.
     message = _CONSTRAINT_MESSAGES.get(name, "That value is already in use.") if name else "That value is already in use."
-    logger.warning("IntegrityError on %s %s — constraint=%s", request.method, request.url.path, name)
+    logger.warning(
+        "IntegrityError on %s %s — sqlstate=%s constraint=%s",
+        request.method, request.url.path, sqlstate, name,
+    )
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={"message": message},

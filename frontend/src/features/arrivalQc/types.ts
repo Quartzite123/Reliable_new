@@ -46,6 +46,7 @@ export interface EligibleHarvestForArrivalQc {
   harvestId: EntityId
   farmerName: string
   plotNumber: string
+  variety?: string
   harvestDate: string
   seasonYear: number
 }
@@ -54,6 +55,7 @@ export interface ArrivalQcRow {
   record: ArrivalQc
   farmerName: string
   plotNumber: string
+  variety?: string
   harvestDate: string
 }
 
@@ -61,6 +63,7 @@ export interface ArrivalQcDetail {
   harvestId: EntityId
   farmerName: string
   plotNumber: string
+  variety?: string
   harvestDate: string
   /**
    * One per harvest, or null if none recorded yet (the backend 404s on

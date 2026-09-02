@@ -14,7 +14,7 @@ export function ContractsListPage() {
 
   const columns: DataTableColumn<ContractRow>[] = [
     { key: 'farmer', header: 'Farmer', render: (r) => r.farmerName, isPrimary: true },
-    { key: 'plot', header: 'Plot', render: (r) => r.plotNumber },
+    { key: 'plot', header: 'Plot', render: (r) => (r.variety ? `${r.plotNumber} — ${r.variety}` : r.plotNumber) },
     { key: 'season', header: 'Season', render: (r) => r.seasonYear },
     { key: 'rate', header: 'Rate/kg', render: (r) => `₹${r.contract.ratePerKg}` },
     { key: 'rejection', header: 'Rejection %', render: (r) => `${r.contract.rejectionPercent}%` },

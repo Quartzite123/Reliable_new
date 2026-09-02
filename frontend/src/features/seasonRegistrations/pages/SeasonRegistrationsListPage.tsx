@@ -27,7 +27,12 @@ export function SeasonRegistrationsListPage() {
 
   const columns: DataTableColumn<SeasonRegistrationRow>[] = [
     { key: 'farmer', header: 'Farmer', render: (r) => r.farmerName, isPrimary: true },
-    { key: 'plot', header: 'Plot', render: (r) => `${r.plotNumber} (${r.mhRegistrationNumber})` },
+    {
+      key: 'plot',
+      header: 'Plot',
+      render: (r) =>
+        `${r.plotNumber}${r.registration.varietyName ? ` — ${r.registration.varietyName}` : ''} (${r.mhRegistrationNumber})`,
+    },
     { key: 'season', header: 'Season', render: (r) => r.registration.seasonYear },
     {
       key: 'status',

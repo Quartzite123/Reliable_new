@@ -9,3 +9,5 @@ export interface SeasonRegistrationRow {
   farmerId: EntityId
   farmerName: string
 }
+
+/** registration.varietyName carries the variety already — no separate field needed here. */

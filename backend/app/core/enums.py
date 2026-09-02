@@ -56,6 +56,24 @@ class RegistrationStatus(str, Enum):
     PRE_COOLED = "Pre-Cooled"
 
 
+class Crop(str, Enum):
+    """
+    plot_varieties.crop — added 2026-09-03, forward-compatibility only.
+
+    Single value today because this system is grapes-only. The CEO has
+    confirmed pomegranate and banana are coming once grapes are done, but
+    their requirements (QC parameters, pack sizes, compliance types) are
+    not known yet and are NOT built here — see PHASE_MAP.md for what's
+    deliberately unbuilt and what's still unanswered. This exists so
+    "grape" is a stated fact on every plot_varieties row instead of an
+    implicit assumption baked into every query — without it, a future
+    "Bhagwa" (pomegranate) row would sit in the same variety_name column as
+    "Thompson Seedless" with nothing distinguishing them.
+    """
+
+    GRAPE = "Grape"
+
+
 class FruitColour(str, Enum):
     GREEN = "Green"
     MILKY_GREEN = "Milky Green"
@@ -179,6 +197,7 @@ __all__ = [
     "UserRole",
     "FarmerStatus",
     "RegistrationStatus",
+    "Crop",
     "FruitColour",
     "OverallObservation",
     "FieldQCResult",

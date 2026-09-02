@@ -29,6 +29,7 @@ export interface ContractPrerequisites {
   farmerId: EntityId
   farmerName: string
   plotNumber: string
+  variety?: string
   seasonYear: number
 }
 
@@ -51,6 +52,7 @@ export interface ContractRow {
   contract: Contract
   farmerName: string
   plotNumber: string
+  variety?: string
   seasonYear: number
 }
 
@@ -58,5 +60,6 @@ export interface EligiblePlotForContract {
   seasonRegistrationId: EntityId
   farmerName: string
   plotNumber: string
+  variety?: string
   seasonYear: number
 }

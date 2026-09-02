@@ -54,7 +54,7 @@ def add_variety(
             detail=f"Variety '{body.variety_name}' already registered on this plot",
         )
 
-    pv = PlotVariety(plot_id=plot_id, variety_name=body.variety_name)
+    pv = PlotVariety(plot_id=plot_id, variety_name=body.variety_name, area_acres=body.area_acres)
     db.add(pv)
     db.commit()
     db.refresh(pv)
