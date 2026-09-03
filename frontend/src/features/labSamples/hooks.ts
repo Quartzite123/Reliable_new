@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EntityId } from '@/types/common'
+import { invalidatePipelineEligibility, PIPELINE_ELIGIBILITY_META } from '@/api/pipelineEligibility'
 import { labSamplesApi } from './index'
 import type { CreateLabSampleInput } from './types'
 
@@ -11,7 +12,11 @@ export const labSamplesQueryKeys = {
 }
 
 export function useEligiblePlotsForLab() {
-  return useQuery({ queryKey: labSamplesQueryKeys.eligible, queryFn: labSamplesApi.listEligiblePlots })
+  return useQuery({
+    queryKey: labSamplesQueryKeys.eligible,
+    queryFn: labSamplesApi.listEligiblePlots,
+    meta: PIPELINE_ELIGIBILITY_META,
+  })
 }
 
 export function useLabSamples() {
@@ -41,6 +46,8 @@ export function useCreateLabSample() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: labSamplesQueryKeys.eligible })
       queryClient.invalidateQueries({ queryKey: labSamplesQueryKeys.all })
+      // A pass here makes the registration eligible for a contract.
+      invalidatePipelineEligibility(queryClient)
     },
   })
 }

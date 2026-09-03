@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EntityId } from '@/types/common'
+import { PIPELINE_ELIGIBILITY_META } from '@/api/pipelineEligibility'
 import { harvestsApi } from './index'
 import type { CreateHarvestInput } from './types'
 
@@ -11,7 +12,11 @@ export const harvestsQueryKeys = {
 }
 
 export function useEligiblePlotsForHarvest() {
-  return useQuery({ queryKey: harvestsQueryKeys.eligible, queryFn: harvestsApi.listEligiblePlots })
+  return useQuery({
+    queryKey: harvestsQueryKeys.eligible,
+    queryFn: harvestsApi.listEligiblePlots,
+    meta: PIPELINE_ELIGIBILITY_META,
+  })
 }
 
 export function useHarvests() {

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EntityId } from '@/types/common'
+import { invalidatePipelineEligibility } from '@/api/pipelineEligibility'
 import { weighingApi } from './index'
 import type { CreateWeighingInput } from './types'
 
@@ -36,6 +37,9 @@ export function useCreateWeighing() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: weighingQueryKeys.all })
       queryClient.invalidateQueries({ queryKey: ['vehicle-trips'] })
+      // Once every trip on a harvest is weighed, its registration becomes
+      // eligible for Arrival QC.
+      invalidatePipelineEligibility(queryClient)
     },
   })
 }

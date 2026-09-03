@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EntityId } from '@/types/common'
+import { invalidatePipelineEligibility, PIPELINE_ELIGIBILITY_META } from '@/api/pipelineEligibility'
 import { packagingApi } from './index'
 import type { CreatePackagingInput } from './types'
 
@@ -10,7 +11,11 @@ export const packagingQueryKeys = {
 }
 
 export function useEligibleHarvestsForPackaging() {
-  return useQuery({ queryKey: packagingQueryKeys.eligible, queryFn: packagingApi.listEligibleHarvests })
+  return useQuery({
+    queryKey: packagingQueryKeys.eligible,
+    queryFn: packagingApi.listEligibleHarvests,
+    meta: PIPELINE_ELIGIBILITY_META,
+  })
 }
 
 export function usePackagingRecords() {
@@ -32,6 +37,12 @@ export function useCreatePackaging() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: packagingQueryKeys.eligible })
       queryClient.invalidateQueries({ queryKey: packagingQueryKeys.all })
+      // A new lot becomes available for palletisation. This is the case
+      // that used to go through listAvailableLots()'s separate,
+      // uncached-by-key fetch path — tagging that query (see
+      // palletisation/hooks.ts) brings it onto this same mechanism rather
+      // than needing a special case.
+      invalidatePipelineEligibility(queryClient)
     },
   })
 }

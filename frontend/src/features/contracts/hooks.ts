@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EntityId } from '@/types/common'
+import { invalidatePipelineEligibility, PIPELINE_ELIGIBILITY_META } from '@/api/pipelineEligibility'
 import { contractsApi } from './index'
 import type { CreateContractInput } from './types'
 
@@ -12,7 +13,11 @@ export const contractsQueryKeys = {
 }
 
 export function useEligiblePlotsForContract() {
-  return useQuery({ queryKey: contractsQueryKeys.eligible, queryFn: contractsApi.listEligiblePlots })
+  return useQuery({
+    queryKey: contractsQueryKeys.eligible,
+    queryFn: contractsApi.listEligiblePlots,
+    meta: PIPELINE_ELIGIBILITY_META,
+  })
 }
 
 export function useContractPrerequisites(seasonRegistrationId: EntityId | undefined) {
@@ -46,6 +51,8 @@ export function useCreateContract() {
       // again 409s (can_create_contract rejects a second contract) with
       // no explanation of why something "on the list" just failed.
       queryClient.invalidateQueries({ queryKey: contractsQueryKeys.eligible })
+      // A contract makes the registration eligible for harvesting.
+      invalidatePipelineEligibility(queryClient)
     },
   })
 }

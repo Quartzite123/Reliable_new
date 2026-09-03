@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EntityId } from '@/types/common'
+import { PIPELINE_ELIGIBILITY_META } from '@/api/pipelineEligibility'
 import { preCoolingApi } from './index'
 import type { CompletePreCoolingInput, CreatePreCoolingInput } from './types'
 
@@ -7,7 +8,7 @@ const KEY = ['pre-cooling'] as const
 const ELIGIBLE_KEY = ['pre-cooling', 'eligible'] as const
 
 export function useEligiblePalletsForPreCooling() {
-  return useQuery({ queryKey: ELIGIBLE_KEY, queryFn: preCoolingApi.listEligiblePallets })
+  return useQuery({ queryKey: ELIGIBLE_KEY, queryFn: preCoolingApi.listEligiblePallets, meta: PIPELINE_ELIGIBILITY_META })
 }
 
 export function usePreCoolingRecords() {
