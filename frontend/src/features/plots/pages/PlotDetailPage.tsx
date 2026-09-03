@@ -104,6 +104,10 @@ export function PlotDetailPage() {
                 plotVariety={pv}
                 registrations={registrations}
                 canManage={canManageVarieties}
+                plotAreaAcres={plot.areaAcres}
+                otherVarietiesTotal={plotVarieties
+                  .filter((other) => other.id !== pv.id)
+                  .reduce((sum, other) => sum + (other.areaAcres ? Number(other.areaAcres) : 0), 0)}
               />
             ))}
           </div>
@@ -361,11 +365,16 @@ function PlotVarietyRow({
   plotVariety,
   registrations,
   canManage,
+  plotAreaAcres,
+  otherVarietiesTotal,
 }: {
   plotId: EntityId
   plotVariety: PlotVariety
   registrations: SeasonRegistration[]
   canManage: boolean
+  plotAreaAcres?: string
+  /** Sum of every other variety's area on this plot — this row's own area is added at render time so the warning recomputes live as it's edited. */
+  otherVarietiesTotal: number
 }) {
   const { showToast } = useToast()
   const removeVariety = useRemovePlotVariety(plotId)
@@ -373,6 +382,12 @@ function PlotVarietyRow({
   const updateVariety = useUpdatePlotVariety(plotId)
   const [isEditingArea, setIsEditingArea] = useState(false)
   const [editedArea, setEditedArea] = useState<number | ''>(plotVariety.areaAcres ? Number(plotVariety.areaAcres) : '')
+
+  // Same soft, dismissible, never-blocking threshold as AddVarietyForm and
+  // the registration flow — recomputed against this row's edited value.
+  const plotTotal = plotAreaAcres ? Number(plotAreaAcres) : undefined
+  const projectedTotal = otherVarietiesTotal + (editedArea === '' ? 0 : editedArea)
+  const showAreaWarning = isEditingArea && !!plotTotal && projectedTotal > plotTotal
 
   const registeredThisSeason = registrations.some(
     (r) => r.plotVarietyId === plotVariety.id && r.seasonYear === CURRENT_SEASON_YEAR,
@@ -420,7 +435,16 @@ function PlotVarietyRow({
       <div className="flex-1">
         <p className="text-sm font-medium text-gray-900">{plotVariety.varietyName}</p>
         {isEditingArea ? (
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1">
+            {showAreaWarning && (
+              <div className="mb-2">
+                <Alert variant="warning" title="Variety areas add up to more than the plot's total area">
+                  {projectedTotal} acres across this plot's varieties with this edit, but the plot is {plotTotal} acres.
+                  This isn't blocked — double-check it wasn't a typo, then continue if it's correct.
+                </Alert>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
             <NumberInput
               id={`edit-area-${plotVariety.id}`}
               unit="acres"
@@ -440,6 +464,7 @@ function PlotVarietyRow({
             <button type="button" onClick={() => setIsEditingArea(false)} className="text-sm font-medium text-gray-600 underline">
               Cancel
             </button>
+            </div>
           </div>
         ) : (
           <p className="text-sm text-gray-500">

@@ -19,7 +19,9 @@ from app.core.deps import require_phase
 from app.core.enums import PhaseKey
 from app.models.plot import Plot
 from app.models.plot_variety import PlotVariety
+from app.models.user import User
 from app.schemas.plot_variety import PlotVarietyCreate, PlotVarietyRead, PlotVarietyUpdate
+from app.services.audit import record_audit_event
 
 router = APIRouter()
 
@@ -87,12 +89,35 @@ def update_variety(
     variety_id: int,
     body: PlotVarietyUpdate,
     db: Session = Depends(get_db),
+    user: User = Depends(require_phase(PhaseKey.PLOT_REGISTRATION)),
 ):
-    """area_acres only — see PlotVarietyUpdate's docstring for why variety_name is deliberately not editable here."""
+    """
+    area_acres only — see PlotVarietyUpdate's docstring for why variety_name
+    is deliberately not editable here.
+
+    Audited (2026-09-03) — this is the only way a plot_variety's area can
+    ever change post-creation (`ensurePlotVariety` deliberately never
+    overwrites on a match, see its comment in the frontend's api.ts), so a
+    wrong or malicious edit here has no other trace. Note this router's
+    other two endpoints (add_variety, remove_variety) do NOT audit yet —
+    scoped to just this one on request, not a sign the other two were
+    checked and found fine.
+    """
     pv = db.get(PlotVariety, variety_id)
     if pv is None:
         raise HTTPException(status_code=404, detail="Plot variety not found")
+
+    old_area = str(pv.area_acres) if pv.area_acres is not None else "not recorded"
     pv.area_acres = body.area_acres
+    new_area = str(pv.area_acres) if pv.area_acres is not None else "not recorded"
+
+    record_audit_event(
+        db, user,
+        action="Plot variety area updated",
+        module="Plots",
+        record_ref=f"{pv.variety_name} (plot {pv.plot_id}): {old_area} -> {new_area}",
+    )
+
     db.commit()
     db.refresh(pv)
     return pv

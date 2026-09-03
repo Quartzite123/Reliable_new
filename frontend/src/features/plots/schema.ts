@@ -37,9 +37,10 @@ export type FollowUpFieldQcFormValues = z.infer<typeof followUpFieldQcSchema>
 
 /**
  * One row of the repeatable varieties array — a variety, its own area
- * (optional; the single-variety case fills this from the plot's total
- * area programmatically rather than asking, see PlotRegistrationPage),
- * and its own independent Field QC (R57).
+ * (optional, asked on every row including the single-variety case — no
+ * silent fill from the plot's total; recording a number nobody entered
+ * would assert something nobody said, reconsidered 2026-09-03), and its
+ * own independent Field QC (R57).
  */
 const varietyEntrySchema = z
   .object({

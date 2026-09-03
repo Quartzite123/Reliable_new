@@ -5,9 +5,16 @@ A single plot can grow multiple grape varieties. Each variety is registered
 here. Each variety runs its own independent pipeline — its own
 season_registration, Field QC, Lab Sample, Contract, and Harvest.
 
-This is the authoritative source for variety, per-registration. `plots.variety`
-still exists (see models/plot.py) but is legacy/denormalized — see that
-column's own comment.
+This is the authoritative source for variety, per-registration — every
+reader in the app (weighing, lab samples, packaging, harvests, arrival QC,
+contracts, palletisation, the season registrations list, Field QC) reads
+variety through here, not through `plots.variety`. That column still
+exists on the `plots` table, still gets set (to NULL) on every new plot,
+and still holds real values on rows created before this table existed —
+but nothing reads it anymore and no current code writes a real value to
+it. It's legacy, due for removal in a later migration once that's been
+true long enough to trust; see its own comment in models/plot.py for the
+full history.
 
 See Business_Rules.md R7, R57, CLAUDE.md Discovery 3.
 """

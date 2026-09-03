@@ -49,17 +49,20 @@ class Plot(Base):
     # APEDA/NRC Grapes plot-level registration number (e.g. MH06081011112).
     # Assigned per plot, not per farmer. Each plot has its own unique number.
     mh_registration_number = Column(String, unique=True, nullable=True)
-    # LEGACY / DENORMALIZED (2026-09-03) — kept in place, still required on
-    # the plot registration form, still populated on every write. The
-    # authoritative source for variety is now plot_varieties, one row per
-    # variety the plot carries, each tied to its own season_registration via
-    # plot_variety_id. This column is NOT yet dead: as of this comment,
-    # weighing.py:77 and several frontend client-side joins still read it
-    # directly instead of going through plot_variety — that reader-switch is
-    # the next piece of work, not done yet. Once every reader has moved off
-    # it and that's proven in practice, this column is a candidate for
-    # removal in a later, separate migration — do not remove it as part of
-    # any change that hasn't first confirmed every reader no longer needs it.
+    # LEGACY (updated 2026-09-03, superseding the note this replaced — that
+    # one said readers and the registration form still depended on this
+    # column; neither is true anymore). The authoritative source for
+    # variety is plot_varieties, one row per variety the plot carries, each
+    # tied to its own season_registration via plot_variety_id. Nothing in
+    # the app reads this column anymore (weighing.py and every frontend
+    # join switched to plot_variety), and the plot registration form no
+    # longer has a Variety field to write one from. It is not, however,
+    # fully inert: `create_plot` still sets it (to NULL, via
+    # `Plot(**body.model_dump())` on a PlotCreate that still declares the
+    # field) on every new row, and old rows from before this switch still
+    # carry whatever value was entered at the time. Kept only for that old
+    # data and until a separate migration drops the column — do not read
+    # from it in any new code, and do not add a value to it deliberately.
     variety = Column(String, nullable=True)  # see module docstring — no Variety enum exists
     area_acres = Column(Numeric, nullable=True)
     village = Column(String, nullable=True)
