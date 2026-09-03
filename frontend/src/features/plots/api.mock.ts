@@ -11,12 +11,23 @@ import {
 } from './mockStore'
 import type {
   FieldQc,
+  FieldQcEntryInput,
   FollowUpFieldQcInput,
   Plot,
   PlotDetail,
   PlotSummary,
-  RegisterPlotWithFieldQcInput,
+  PlotVariety,
+  RegisterPlotMultiVarietyInput,
+  SeasonRegistration,
+  VarietyRegistrationResult,
 } from './types'
+
+/** Mock plot_varieties store — module-local, mirrors the real table's shape closely enough for the mock UI path. */
+const plotVarietiesStore: PlotVariety[] = []
+let nextPlotVarietyId = 1
+function allocatePlotVarietyId(): EntityId {
+  return nextPlotVarietyId++
+}
 
 function latestRegistrationForPlot(plotId: EntityId) {
   const regs = seasonRegistrationsStore.filter((r) => r.plotId === plotId)
@@ -52,11 +63,109 @@ export const plotsApiMock = {
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     }
 
-    return { plot, registrations, fieldQcByRegistration }
+    const plotVarieties = plotVarietiesStore.filter((v) => v.plotId === plotId)
+
+    return { plot, registrations, fieldQcByRegistration, plotVarieties }
   },
 
-  /** One combined submit for Plot + Season Registration + Field QC (Business_Rules R15a). */
-  async registerWithFieldQc(input: RegisterPlotWithFieldQcInput): Promise<{ plot: Plot; registrationId: EntityId }> {
+  async ensurePlotVariety(plotId: EntityId, varietyName: string, areaAcres?: number): Promise<PlotVariety> {
+    await mockDelay(150)
+    const existing = plotVarietiesStore.find((v) => v.plotId === plotId && v.varietyName === varietyName)
+    if (existing) return existing
+    const created: PlotVariety = {
+      id: allocatePlotVarietyId(),
+      plotId,
+      varietyName,
+      areaAcres: areaAcres !== undefined ? String(areaAcres) : undefined,
+      createdAt: new Date().toISOString(),
+    }
+    plotVarietiesStore.push(created)
+    return created
+  },
+
+  async addPlotVariety(plotId: EntityId, varietyName: string, areaAcres?: number): Promise<PlotVariety> {
+    await mockDelay(300)
+    if (plotVarietiesStore.some((v) => v.plotId === plotId && v.varietyName === varietyName)) {
+      throw new ApiError(409, { message: `Variety '${varietyName}' already registered on this plot` })
+    }
+    const created: PlotVariety = {
+      id: allocatePlotVarietyId(),
+      plotId,
+      varietyName,
+      areaAcres: areaAcres !== undefined ? String(areaAcres) : undefined,
+      createdAt: new Date().toISOString(),
+    }
+    plotVarietiesStore.push(created)
+    return created
+  },
+
+  async removePlotVariety(plotVarietyId: EntityId): Promise<void> {
+    await mockDelay(300)
+    const index = plotVarietiesStore.findIndex((v) => v.id === plotVarietyId)
+    if (index === -1) throw new ApiError(404, { message: 'Plot variety not found' })
+    if (seasonRegistrationsStore.some((r) => r.plotVarietyId === plotVarietyId)) {
+      throw new ApiError(409, { message: 'Cannot remove variety with existing season registrations' })
+    }
+    plotVarietiesStore.splice(index, 1)
+  },
+
+  async registerVariety(plotId: EntityId, plotVarietyId: EntityId, seasonYear: number): Promise<SeasonRegistration> {
+    await mockDelay(300)
+    const plotVariety = plotVarietiesStore.find((v) => v.id === plotVarietyId)
+    if (seasonRegistrationsStore.some((r) => r.plotVarietyId === plotVarietyId && r.seasonYear === seasonYear)) {
+      throw new ApiError(409, { message: 'This plot is already registered for that season.' })
+    }
+    const registration: SeasonRegistration = {
+      id: allocateRegistrationId(),
+      plotId,
+      plotVarietyId,
+      varietyName: plotVariety?.varietyName,
+      seasonYear,
+      status: 'Registered',
+      registeredBy: 2,
+      registeredAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    seasonRegistrationsStore.push(registration)
+    return registration
+  },
+
+  async registerVarietyForSeason(
+    plotId: EntityId,
+    plotVarietyId: EntityId,
+    seasonYear: number,
+    fieldQc: FieldQcEntryInput,
+  ): Promise<SeasonRegistration> {
+    const registration = await plotsApiMock.registerVariety(plotId, plotVarietyId, seasonYear)
+    await mockDelay(300)
+    fieldQcStore.push({
+      id: allocateFieldQcId(),
+      seasonRegistrationId: registration.id,
+      inspectionDate: fieldQc.inspectionDate,
+      plannedSamplingDate: fieldQc.plannedSamplingDate,
+      tentativeHarvestDate: fieldQc.tentativeHarvestDate,
+      fruitColour: fieldQc.fruitColour,
+      tssPercent: fieldQc.tssPercent !== undefined ? String(fieldQc.tssPercent) : undefined,
+      thripsPercent: fieldQc.thripsPercent !== undefined ? String(fieldQc.thripsPercent) : undefined,
+      bhuriPercent: fieldQc.bhuriPercent !== undefined ? String(fieldQc.bhuriPercent) : undefined,
+      blackSpotPercent: fieldQc.blackSpotPercent !== undefined ? String(fieldQc.blackSpotPercent) : undefined,
+      cercosporaPercent: fieldQc.cercosporaPercent !== undefined ? String(fieldQc.cercosporaPercent) : undefined,
+      overallObservation: fieldQc.overallObservation,
+      exportableFruitPercent: fieldQc.exportableFruitPercent !== undefined ? String(fieldQc.exportableFruitPercent) : undefined,
+      notes: fieldQc.notes,
+      result: fieldQc.result,
+      inspectedBy: 2,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    registration.status = fieldQc.result === 'Pass' ? 'Field QC Passed' : 'Field QC Failed'
+    registration.updatedAt = new Date().toISOString()
+    return registration
+  },
+
+  /** One combined submit for Plot + (one or more) Season Registration + Field QC (Business_Rules R15a, R57). */
+  async registerMultipleVarieties(input: RegisterPlotMultiVarietyInput): Promise<{ plot: Plot; results: VarietyRegistrationResult[] }> {
     await mockDelay(500)
 
     let plot = input.plotId ? plotsStore.find((p) => p.id === input.plotId) : undefined
@@ -65,7 +174,6 @@ export const plotsApiMock = {
       Object.assign(plot, {
         plotNumber: input.plotNumber,
         mhRegistrationNumber: input.mhRegistrationNumber,
-        variety: input.variety,
         areaAcres: input.areaAcres !== undefined ? String(input.areaAcres) : undefined,
         village: input.village,
         taluka: input.taluka,
@@ -92,7 +200,6 @@ export const plotsApiMock = {
         farmerId: input.farmerId,
         plotNumber: input.plotNumber,
         mhRegistrationNumber: input.mhRegistrationNumber,
-        variety: input.variety,
         areaAcres: input.areaAcres !== undefined ? String(input.areaAcres) : undefined,
         village: input.village,
         taluka: input.taluka,
@@ -107,47 +214,18 @@ export const plotsApiMock = {
       plotsStore.push(plot)
     }
 
-    if (seasonRegistrationsStore.some((r) => r.plotId === plot!.id && r.seasonYear === input.seasonYear)) {
-      throw new ApiError(409, {
-        message: 'This plot is already registered for this season.',
-        fieldErrors: { seasonYear: 'A registration already exists for this plot and season.' },
-      })
+    const results: VarietyRegistrationResult[] = []
+    for (const entry of input.varieties) {
+      try {
+        const plotVariety = await plotsApiMock.ensurePlotVariety(plot.id, entry.variety, entry.areaAcres)
+        const registration = await plotsApiMock.registerVarietyForSeason(plot.id, plotVariety.id, input.seasonYear, entry)
+        results.push({ variety: entry.variety, success: true, registrationId: registration.id })
+      } catch (error) {
+        results.push({ variety: entry.variety, success: false, error })
+      }
     }
 
-    const registration = {
-      id: allocateRegistrationId(),
-      plotId: plot.id,
-      seasonYear: input.seasonYear,
-      status: input.result === 'Pass' ? ('Field QC Passed' as const) : ('Field QC Failed' as const),
-      registeredBy: 2,
-      registeredAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
-    seasonRegistrationsStore.push(registration)
-
-    fieldQcStore.push({
-      id: allocateFieldQcId(),
-      seasonRegistrationId: registration.id,
-      inspectionDate: input.inspectionDate,
-      plannedSamplingDate: input.plannedSamplingDate,
-      tentativeHarvestDate: input.tentativeHarvestDate,
-      fruitColour: input.fruitColour,
-      tssPercent: input.tssPercent !== undefined ? String(input.tssPercent) : undefined,
-      thripsPercent: input.thripsPercent !== undefined ? String(input.thripsPercent) : undefined,
-      bhuriPercent: input.bhuriPercent !== undefined ? String(input.bhuriPercent) : undefined,
-      blackSpotPercent: input.blackSpotPercent !== undefined ? String(input.blackSpotPercent) : undefined,
-      cercosporaPercent: input.cercosporaPercent !== undefined ? String(input.cercosporaPercent) : undefined,
-      overallObservation: input.overallObservation,
-      exportableFruitPercent: input.exportableFruitPercent !== undefined ? String(input.exportableFruitPercent) : undefined,
-      notes: input.notes,
-      result: input.result,
-      inspectedBy: 2,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    })
-
-    return { plot, registrationId: registration.id }
+    return { plot, results }
   },
 
   /** Follow-up inspection after a Field QC failure — old record kept, status resets on pass (Business_Rules R17). */

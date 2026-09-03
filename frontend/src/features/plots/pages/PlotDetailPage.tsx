@@ -16,6 +16,7 @@ import { FormField } from '@/components/forms/FormField'
 import { NumberInput } from '@/components/forms/NumberInput'
 import { DatePicker } from '@/components/forms/DatePicker'
 import { RadioGroup } from '@/components/forms/RadioGroup'
+import { Select } from '@/components/forms/Select'
 import { Textarea } from '@/components/forms/Textarea'
 import { ValidationSummary } from '@/components/feedback/ValidationSummary'
 import { useToast } from '@/app/ToastContext'
@@ -23,13 +24,23 @@ import { toFriendlyMessage } from '@/utils/errorMessages'
 import { usePermission } from '@/permissions/usePermission'
 import { seasonStatusToBadgeStatus } from '@/types/season'
 import { buildWorkflowSteps } from '@/utils/workflowSteps'
-import { usePlotDetail, useSubmitFollowUpFieldQc } from '../hooks'
+import {
+  useAddPlotVariety,
+  usePlotDetail,
+  useRegisterVariety,
+  useRemovePlotVariety,
+  useSubmitFollowUpFieldQc,
+} from '../hooks'
 import { followUpFieldQcSchema, type FollowUpFieldQcFormValues } from '../schema'
+import { GRAPE_VARIETIES, type GrapeVariety, type PlotVariety, type SeasonRegistration } from '../types'
+
+const CURRENT_SEASON_YEAR = new Date().getFullYear()
 
 export function PlotDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data, isLoading, error, refetch } = usePlotDetail(id ? Number(id) : undefined)
   const canCreateFieldQc = usePermission('fieldQc:create')
+  const canManageVarieties = usePermission('plots:create') // same gate as plot creation — backend's plot_varieties endpoints are all require_phase(PLOT_REGISTRATION)
   // A Set, not a single value — a plot can have more than one registration
   // (one per variety) needing Field QC at once. A single nullable value
   // here would silently discard whatever a worker had typed into one
@@ -51,7 +62,7 @@ export function PlotDetailPage() {
   if (error) return <ErrorState error={error} onRetry={() => refetch()} />
   if (!data) return null
 
-  const { plot, registrations, fieldQcByRegistration } = data
+  const { plot, registrations, fieldQcByRegistration, plotVarieties } = data
   const latest = registrations[0]
 
   return (
@@ -75,6 +86,31 @@ export function PlotDetailPage() {
             },
           ]}
         />
+      </SectionCard>
+
+      <SectionCard
+        title="Varieties"
+        description="Every variety this plot carries. Adding one doesn't register it for a season by itself — that's a separate step below, since a plot's varieties can be added well before or after a given season's registration."
+      >
+        {plotVarieties.length === 0 ? (
+          <EmptyState title="No varieties recorded yet" />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {plotVarieties.map((pv) => (
+              <PlotVarietyRow
+                key={pv.id}
+                plotId={plot.id}
+                plotVariety={pv}
+                registrations={registrations}
+                canManage={canManageVarieties}
+              />
+            ))}
+          </div>
+        )}
+
+        {canManageVarieties && (
+          <AddVarietyForm plotId={plot.id} existingVarietyNames={plotVarieties.map((v) => v.varietyName)} />
+        )}
       </SectionCard>
 
       {latest && (
@@ -308,5 +344,144 @@ function FieldQcRecordForm({
         {isSubmitting ? 'Saving...' : isFollowUp ? 'Submit follow-up inspection' : 'Save Field QC'}
       </button>
     </form>
+  )
+}
+
+/**
+ * One row in the Varieties management section: the variety, its area, a
+ * Remove action, and — if this variety doesn't already have a registration
+ * for the current season — a "Register for season" action. Deliberately
+ * NOT automatic on add (per design): a worker who just added a variety
+ * sees this same button on that new row, one explicit click away, rather
+ * than a registration silently appearing.
+ */
+function PlotVarietyRow({
+  plotId,
+  plotVariety,
+  registrations,
+  canManage,
+}: {
+  plotId: EntityId
+  plotVariety: PlotVariety
+  registrations: SeasonRegistration[]
+  canManage: boolean
+}) {
+  const { showToast } = useToast()
+  const removeVariety = useRemovePlotVariety(plotId)
+  const registerVariety = useRegisterVariety(plotId)
+
+  const registeredThisSeason = registrations.some(
+    (r) => r.plotVarietyId === plotVariety.id && r.seasonYear === CURRENT_SEASON_YEAR,
+  )
+
+  const handleRemove = async () => {
+    try {
+      await removeVariety.mutateAsync(plotVariety.id)
+      showToast(`${plotVariety.varietyName} removed.`, 'success')
+    } catch (error) {
+      // Backend 409s as "Cannot remove variety with existing season
+      // registrations" when this variety has any registration at all
+      // (not just this season's) — surfaced as-is, no client-side
+      // re-check (per design: don't build new validation for this).
+      showToast(toFriendlyMessage(error), 'error')
+    }
+  }
+
+  const handleRegister = async () => {
+    try {
+      await registerVariety.mutateAsync({ plotVarietyId: plotVariety.id, seasonYear: CURRENT_SEASON_YEAR })
+      showToast(`Registered for season ${CURRENT_SEASON_YEAR}. Record its Field QC below.`, 'success')
+    } catch (error) {
+      showToast(toFriendlyMessage(error), 'error')
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 p-3">
+      <div>
+        <p className="text-sm font-medium text-gray-900">{plotVariety.varietyName}</p>
+        <p className="text-sm text-gray-500">{plotVariety.areaAcres ? `${plotVariety.areaAcres} acres` : 'Area not recorded'}</p>
+      </div>
+      {canManage && (
+        <div className="flex items-center gap-3">
+          {registeredThisSeason ? (
+            <span className="text-sm text-gray-500">Registered for {CURRENT_SEASON_YEAR}</span>
+          ) : (
+            <button
+              type="button"
+              onClick={handleRegister}
+              disabled={registerVariety.isPending}
+              className="min-h-9 rounded-lg border-2 border-brand-700 px-3 text-sm font-semibold text-brand-800 hover:bg-brand-50 disabled:opacity-60"
+            >
+              {registerVariety.isPending ? 'Registering...' : `Register for ${CURRENT_SEASON_YEAR}`}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleRemove}
+            disabled={removeVariety.isPending}
+            className="text-sm font-medium text-red-700 underline disabled:opacity-60"
+          >
+            Remove
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Add-variety mini-form — variety (excluding ones this plot already has) + optional area. */
+function AddVarietyForm({ plotId, existingVarietyNames }: { plotId: EntityId; existingVarietyNames: string[] }) {
+  const { showToast } = useToast()
+  const addVariety = useAddPlotVariety(plotId)
+  const [variety, setVariety] = useState<GrapeVariety | ''>('')
+  const [areaAcres, setAreaAcres] = useState<number | ''>('')
+
+  const availableVarieties = GRAPE_VARIETIES.filter((v) => !existingVarietyNames.includes(v))
+
+  const handleAdd = async () => {
+    if (!variety) {
+      showToast('Select a variety to add.', 'error')
+      return
+    }
+    try {
+      await addVariety.mutateAsync({ varietyName: variety, areaAcres: areaAcres === '' ? undefined : areaAcres })
+      showToast(`${variety} added.`, 'success')
+      setVariety('')
+      setAreaAcres('')
+    } catch (error) {
+      showToast(toFriendlyMessage(error), 'error')
+    }
+  }
+
+  return (
+    <div className="mt-4 grid grid-cols-1 gap-3 border-t border-gray-200 pt-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+      <FormField label="Add a variety" htmlFor="add-variety">
+        <Select
+          id="add-variety"
+          placeholder={availableVarieties.length === 0 ? 'All varieties already added' : 'Select variety'}
+          options={availableVarieties.map((v) => ({ value: v, label: v }))}
+          value={variety}
+          onChange={(e) => setVariety(e.target.value as GrapeVariety)}
+        />
+      </FormField>
+      <FormField label="Area" htmlFor="add-variety-area" hint="Optional">
+        <NumberInput
+          id="add-variety-area"
+          unit="acres"
+          step="0.01"
+          value={areaAcres}
+          onChange={(e) => setAreaAcres(e.target.value ? Number(e.target.value) : '')}
+        />
+      </FormField>
+      <button
+        type="button"
+        onClick={handleAdd}
+        disabled={addVariety.isPending || availableVarieties.length === 0}
+        className="min-h-11 rounded-lg bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60"
+      >
+        {addVariety.isPending ? 'Adding...' : 'Add variety'}
+      </button>
+    </div>
   )
 }
