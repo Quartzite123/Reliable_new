@@ -106,6 +106,23 @@ export const plotsApiReal = {
    * visit is Pass 2 (a repeatable variety+area+field-QC section); this
    * only restores the plumbing this call needed to keep working once
    * season_registrations.plot_variety_id became required.
+   *
+   * IMPORTANT — these four calls are sequential and NOT transactional.
+   * There is no rollback if a later call fails after an earlier one
+   * committed: e.g. the plot and its season_registration can both exist
+   * in the database while the final field-qc POST never lands (dropped
+   * connection, closed tab, a validation edge case). That registration is
+   * then stuck at status `Registered` with zero field_qc rows.
+   *
+   * This is recoverable, not permanent, ONLY because PlotDetailPage has a
+   * "Record Field QC" action for exactly this state (any registration
+   * with no Field QC yet, not only a follow-up after a failure — see
+   * PlotDetailPage.tsx's FieldQcRecordForm, added 2026-09-03). Before that
+   * existed, a registration in this state had no path to ever get a Field
+   * QC record at all. Do not remove that action as "redundant with
+   * registration" — it is the only recovery path for a partial failure of
+   * this exact function, and this comment is the reason it looks
+   * redundant on a quick read of PlotDetailPage in isolation.
    */
   async registerWithFieldQc(
     input: RegisterPlotWithFieldQcInput,

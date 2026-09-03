@@ -11,6 +11,7 @@ import { StatusBadge } from '@/components/workflow/StatusBadge'
 import { Alert } from '@/components/feedback/Alert'
 import { LoadingState } from '@/components/data/LoadingState'
 import { ErrorState } from '@/components/data/ErrorState'
+import { EmptyState } from '@/components/data/EmptyState'
 import { FormField } from '@/components/forms/FormField'
 import { NumberInput } from '@/components/forms/NumberInput'
 import { DatePicker } from '@/components/forms/DatePicker'
@@ -29,7 +30,22 @@ export function PlotDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data, isLoading, error, refetch } = usePlotDetail(id ? Number(id) : undefined)
   const canCreateFieldQc = usePermission('fieldQc:create')
-  const [followUpFor, setFollowUpFor] = useState<EntityId | null>(null)
+  // A Set, not a single value — a plot can have more than one registration
+  // (one per variety) needing Field QC at once. A single nullable value
+  // here would silently discard whatever a worker had typed into one
+  // registration's form the moment they opened another's — the same
+  // silent-data-loss class already fixed twice elsewhere in this app, and
+  // exactly the situation a two-variety plot creates.
+  const [openFieldQcFor, setOpenFieldQcFor] = useState<Set<EntityId>>(new Set())
+
+  const toggleFieldQcForm = (registrationId: EntityId) => {
+    setOpenFieldQcFor((prev) => {
+      const next = new Set(prev)
+      if (next.has(registrationId)) next.delete(registrationId)
+      else next.add(registrationId)
+      return next
+    })
+  }
 
   if (isLoading) return <LoadingState rows={5} />
   if (error) return <ErrorState error={error} onRetry={() => refetch()} />
@@ -73,29 +89,45 @@ export function PlotDetailPage() {
       {registrations.map((registration) => {
         const qcHistory = fieldQcByRegistration[registration.id] ?? []
         const failed = registration.status === 'Field QC Failed'
+        const isOpen = openFieldQcFor.has(registration.id)
+        const variety = registration.varietyName
 
         return (
           <SectionCard
             key={registration.id}
-            title={
-              registration.varietyName
-                ? `Field QC — Season ${registration.seasonYear} — ${registration.varietyName}`
-                : `Field QC — Season ${registration.seasonYear}`
-            }
+            title={variety ? `Field QC — Season ${registration.seasonYear} — ${variety}` : `Field QC — Season ${registration.seasonYear}`}
           >
-            <div className="flex flex-col gap-3">
-              {qcHistory.map((qc) => (
-                <div key={qc.id} className="rounded-lg border border-gray-200 p-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-gray-800">Inspected {qc.inspectionDate}</p>
-                    <StatusBadge status={qc.result === 'Pass' ? 'passed' : 'failed'} />
+            {qcHistory.length === 0 ? (
+              <EmptyState
+                title="No inspection recorded yet"
+                description={variety ? `Field QC has not been recorded for ${variety} on this plot.` : undefined}
+                action={
+                  canCreateFieldQc && (
+                    <button
+                      type="button"
+                      onClick={() => toggleFieldQcForm(registration.id)}
+                      className="min-h-11 rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800"
+                    >
+                      {isOpen ? 'Cancel' : 'Record Field QC'}
+                    </button>
+                  )
+                }
+              />
+            ) : (
+              <div className="flex flex-col gap-3">
+                {qcHistory.map((qc) => (
+                  <div key={qc.id} className="rounded-lg border border-gray-200 p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-800">Inspected {qc.inspectionDate}</p>
+                      <StatusBadge status={qc.result === 'Pass' ? 'passed' : 'failed'} />
+                    </div>
+                    <p className="mt-1 text-sm text-gray-600">
+                      Exportable fruit: {qc.exportableFruitPercent}% · Overall: {qc.overallObservation}
+                    </p>
                   </div>
-                  <p className="mt-1 text-sm text-gray-600">
-                    Exportable fruit: {qc.exportableFruitPercent}% · Overall: {qc.overallObservation}
-                  </p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
 
             {failed && (
               <div className="mt-3">
@@ -105,17 +137,22 @@ export function PlotDetailPage() {
                 {canCreateFieldQc && (
                   <button
                     type="button"
-                    onClick={() => setFollowUpFor(followUpFor === registration.id ? null : registration.id)}
+                    onClick={() => toggleFieldQcForm(registration.id)}
                     className="mt-2 text-sm font-medium text-brand-700 underline"
                   >
-                    {followUpFor === registration.id ? 'Cancel follow-up' : 'Create follow-up / re-attempt'}
+                    {isOpen ? 'Cancel follow-up' : 'Create follow-up / re-attempt'}
                   </button>
                 )}
               </div>
             )}
 
-            {followUpFor === registration.id && (
-              <FollowUpFieldQcForm registrationId={registration.id} onDone={() => setFollowUpFor(null)} />
+            {isOpen && (
+              <FieldQcRecordForm
+                registrationId={registration.id}
+                variety={variety}
+                isFollowUp={failed}
+                onDone={() => toggleFieldQcForm(registration.id)}
+              />
             )}
           </SectionCard>
         )
@@ -124,7 +161,31 @@ export function PlotDetailPage() {
   )
 }
 
-function FollowUpFieldQcForm({ registrationId, onDone }: { registrationId: EntityId; onDone: () => void }) {
+/**
+ * Records Field QC for one registration — first-ever inspection or a
+ * follow-up after a fail, both go through the same POST
+ * `/registrations/{id}/field-qc` call (the backend's can_record_field_qc
+ * guard accepts REGISTERED and FIELD_QC_FAILED alike), so this is one
+ * component, not two. `isFollowUp` only changes copy (button label,
+ * success toast) — never gate anything functional on it here; the backend
+ * is what actually decides whether this call is allowed.
+ *
+ * `variety` is rendered as a heading inside the form itself, not just
+ * relied on via the SectionCard title above it — that title scrolls out
+ * of view on a long form, which is exactly when a worker filling in a
+ * second variety's inspection most needs to see which one they're on.
+ */
+function FieldQcRecordForm({
+  registrationId,
+  variety,
+  isFollowUp,
+  onDone,
+}: {
+  registrationId: EntityId
+  variety?: string
+  isFollowUp: boolean
+  onDone: () => void
+}) {
   const { showToast } = useToast()
   const submitFollowUp = useSubmitFollowUpFieldQc(registrationId)
 
@@ -145,7 +206,7 @@ function FollowUpFieldQcForm({ registrationId, onDone }: { registrationId: Entit
   const onSubmit = async (values: FollowUpFieldQcFormValues) => {
     try {
       await submitFollowUp.mutateAsync({ seasonRegistrationId: registrationId, ...values })
-      showToast('Follow-up inspection recorded.', 'success')
+      showToast(isFollowUp ? 'Follow-up inspection recorded.' : 'Field QC recorded.', 'success')
       onDone()
     } catch (error) {
       showToast(toFriendlyMessage(error), 'error')
@@ -154,6 +215,11 @@ function FollowUpFieldQcForm({ registrationId, onDone }: { registrationId: Entit
 
   return (
     <form className="mt-4 flex flex-col gap-4 rounded-lg border-2 border-dashed border-gray-300 p-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+      {variety && (
+        <p className="text-sm font-semibold text-gray-800">
+          Recording {isFollowUp ? 'a follow-up inspection' : 'Field QC'} for <span className="text-brand-700">{variety}</span>
+        </p>
+      )}
       <ValidationSummary errors={errorMessages} />
 
       <FormField label="Inspection date" htmlFor="fu-inspectionDate" required error={errors.inspectionDate?.message}>
@@ -228,7 +294,7 @@ function FollowUpFieldQcForm({ registrationId, onDone }: { registrationId: Entit
         disabled={isSubmitting}
         className="min-h-11 rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60"
       >
-        {isSubmitting ? 'Saving...' : 'Submit follow-up inspection'}
+        {isSubmitting ? 'Saving...' : isFollowUp ? 'Submit follow-up inspection' : 'Save Field QC'}
       </button>
     </form>
   )
