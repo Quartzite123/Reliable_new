@@ -99,6 +99,14 @@ export const plotsApiMock = {
     return created
   },
 
+  async updatePlotVariety(plotVarietyId: EntityId, areaAcres: number | undefined): Promise<PlotVariety> {
+    await mockDelay(300)
+    const pv = plotVarietiesStore.find((v) => v.id === plotVarietyId)
+    if (!pv) throw new ApiError(404, { message: 'Plot variety not found' })
+    pv.areaAcres = areaAcres !== undefined ? String(areaAcres) : undefined
+    return pv
+  },
+
   async removePlotVariety(plotVarietyId: EntityId): Promise<void> {
     await mockDelay(300)
     const index = plotVarietiesStore.findIndex((v) => v.id === plotVarietyId)

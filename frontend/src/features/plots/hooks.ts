@@ -76,6 +76,19 @@ export function useAddPlotVariety(plotId: EntityId) {
   })
 }
 
+/** Correct an existing variety's area — area only, no rename (see plotsApi.updatePlotVariety). */
+export function useUpdatePlotVariety(plotId: EntityId) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { plotVarietyId: EntityId; areaAcres: number | undefined }) =>
+      plotsApi.updatePlotVariety(input.plotVarietyId, input.areaAcres),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: plotsQueryKeys.detail(plotId) })
+      queryClient.invalidateQueries({ queryKey: plotsQueryKeys.all })
+    },
+  })
+}
+
 /** Remove a variety from an existing plot — backend 409s if any registration references it (surfaced via toast, not re-validated here). */
 export function useRemovePlotVariety(plotId: EntityId) {
   const queryClient = useQueryClient()

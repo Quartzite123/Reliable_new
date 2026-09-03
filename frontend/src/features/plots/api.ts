@@ -93,9 +93,18 @@ export const plotsApiReal = {
    * flow, where a re-post is a normal, expected case, not a mistake.
    *
    * If a match already exists, its area is left as-is even if a different
-   * `areaAcres` is passed this time — editing an existing variety's area
-   * isn't in scope here (the Varieties management screen doesn't offer it
-   * either yet).
+   * `areaAcres` is passed this time — this is NOT a leftover gap now that
+   * `updatePlotVariety` exists (added 2026-09-03). It's deliberate: this
+   * function runs every time a worker re-registers an existing variety for
+   * a new season, which is a routine, frequent action that has nothing to
+   * do with correcting the variety's area. If it silently overwrote area
+   * on every match, a worker re-registering Thompson next season would
+   * accidentally blank out (or wrongly change) an area someone had
+   * carefully corrected via the Varieties section's edit control, just by
+   * registering that season's Field QC — a side effect with nothing on
+   * screen suggesting the area was ever touched. Changing area is only
+   * ever explicit now, through `updatePlotVariety` — never an incidental
+   * side effect of registering a season.
    */
   async ensurePlotVariety(plotId: EntityId, varietyName: string, areaAcres?: number): Promise<PlotVariety> {
     const existing = await httpClient.get<PlotVariety[]>(`/plots/${plotId}/varieties`)
@@ -118,6 +127,16 @@ export const plotsApiReal = {
 
   /** Backend 409s with "Cannot remove variety with existing season registrations" if any registration references it — surfaced as-is via toast, no client-side re-check needed. */
   removePlotVariety: (plotVarietyId: EntityId) => httpClient.delete<void>(`/plot-varieties/${plotVarietyId}`),
+
+  /**
+   * area_acres only — no variety rename. season_registrations reference a
+   * plot_variety by id; renaming would silently change what an
+   * already-recorded Field QC/lab sample/contract/harvest was performed
+   * on, with nothing in the record showing it happened. Area carries no
+   * such risk (see PlotVarietyUpdate on the backend for the full reasoning).
+   */
+  updatePlotVariety: (plotVarietyId: EntityId, areaAcres: number | undefined) =>
+    httpClient.patch<PlotVariety>(`/plot-varieties/${plotVarietyId}`, { areaAcres }),
 
   /**
    * Registers one existing plot_variety for a season — no Field QC

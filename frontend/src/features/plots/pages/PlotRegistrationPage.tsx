@@ -92,9 +92,12 @@ export function PlotRegistrationPage() {
 
   // Soft, dismissible-by-nature warning only — never blocks submit. No
   // warning for an under-total: unallocated/non-varietal area within a
-  // plot is normal (agreed design, not guessed).
+  // plot is normal (agreed design, not guessed). Not gated on
+  // hasMultipleVarieties — every row has its own area field now
+  // (2026-09-03, no more silent single-variety fill), so a single
+  // mistyped area can trip this threshold on its own.
   const totalVarietyArea = (varietyRows ?? []).reduce((sum, v) => sum + (v?.areaAcres ?? 0), 0)
-  const showAreaWarning = hasMultipleVarieties && !!plotAreaAcres && totalVarietyArea > plotAreaAcres
+  const showAreaWarning = !!plotAreaAcres && totalVarietyArea > plotAreaAcres
 
   const varietiesErrors = errors.varieties as
     | (Record<string, { message?: string }> | undefined)[] & { root?: { message?: string } }
@@ -119,16 +122,16 @@ export function PlotRegistrationPage() {
       return
     }
     try {
-      const varieties = values.varieties.map((v) => ({
-        ...v,
-        // Single-variety case: the variety occupies the whole plot — no
-        // separate area question asked, derived from the plot's own area
-        // instead. Multi-variety case: whatever was entered per row,
-        // including left blank.
-        areaAcres: hasMultipleVarieties ? v.areaAcres : (v.areaAcres ?? values.areaAcres),
-      }))
-
-      const { plot, results } = await registerPlot.mutateAsync({ ...values, farmerId, varieties })
+      // Single-variety case: no area field is shown (v.areaAcres is
+      // undefined), and it's sent that way, not backfilled from the plot's
+      // own area. Recording "4.00 acres" for a variety nobody actually
+      // measured would assert something nobody said — the DB would then
+      // hold a number the system invented, not one a person confirmed
+      // (2026-09-03, reconsidered after this silently produced an
+      // uncorrectable area-sum-warning false positive once a second
+      // variety was added later). Leaving it null is honest; a person
+      // enters it explicitly later via the Varieties section if it matters.
+      const { plot, results } = await registerPlot.mutateAsync({ ...values, farmerId, varieties: values.varieties })
 
       const succeeded = results.filter((r) => r.success)
       const failed = results.filter((r) => !r.success)
@@ -353,17 +356,15 @@ function VarietyFieldQcRow({
               {...register(`varieties.${index}.variety`)}
             />
           </FormField>
-          {isMulti && (
-            <FormField label="Area" htmlFor={`variety-area-${index}`} hint="Optional" error={errors?.areaAcres?.message}>
-              <NumberInput
-                id={`variety-area-${index}`}
-                unit="acres"
-                step="0.01"
-                hasError={!!errors?.areaAcres}
-                {...register(`varieties.${index}.areaAcres`, { valueAsNumber: true })}
-              />
-            </FormField>
-          )}
+          <FormField label="Area" htmlFor={`variety-area-${index}`} hint="Optional" error={errors?.areaAcres?.message}>
+            <NumberInput
+              id={`variety-area-${index}`}
+              unit="acres"
+              step="0.01"
+              hasError={!!errors?.areaAcres}
+              {...register(`varieties.${index}.areaAcres`, { valueAsNumber: true })}
+            />
+          </FormField>
         </div>
         {canRemove && (
           <button type="button" onClick={onRemove} className="mt-6 text-sm font-medium text-red-700 underline">

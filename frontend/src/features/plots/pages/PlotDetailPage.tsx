@@ -30,6 +30,7 @@ import {
   useRegisterVariety,
   useRemovePlotVariety,
   useSubmitFollowUpFieldQc,
+  useUpdatePlotVariety,
 } from '../hooks'
 import { followUpFieldQcSchema, type FollowUpFieldQcFormValues } from '../schema'
 import { GRAPE_VARIETIES, type GrapeVariety, type PlotVariety, type SeasonRegistration } from '../types'
@@ -109,7 +110,7 @@ export function PlotDetailPage() {
         )}
 
         {canManageVarieties && (
-          <AddVarietyForm plotId={plot.id} existingVarietyNames={plotVarieties.map((v) => v.varietyName)} />
+          <AddVarietyForm plotId={plot.id} plotAreaAcres={plot.areaAcres} existingVarieties={plotVarieties} />
         )}
       </SectionCard>
 
@@ -369,6 +370,9 @@ function PlotVarietyRow({
   const { showToast } = useToast()
   const removeVariety = useRemovePlotVariety(plotId)
   const registerVariety = useRegisterVariety(plotId)
+  const updateVariety = useUpdatePlotVariety(plotId)
+  const [isEditingArea, setIsEditingArea] = useState(false)
+  const [editedArea, setEditedArea] = useState<number | ''>(plotVariety.areaAcres ? Number(plotVariety.areaAcres) : '')
 
   const registeredThisSeason = registrations.some(
     (r) => r.plotVarietyId === plotVariety.id && r.seasonYear === CURRENT_SEASON_YEAR,
@@ -396,11 +400,57 @@ function PlotVarietyRow({
     }
   }
 
+  const startEditingArea = () => {
+    setEditedArea(plotVariety.areaAcres ? Number(plotVariety.areaAcres) : '')
+    setIsEditingArea(true)
+  }
+
+  const handleSaveArea = async () => {
+    try {
+      await updateVariety.mutateAsync({ plotVarietyId: plotVariety.id, areaAcres: editedArea === '' ? undefined : editedArea })
+      showToast(`${plotVariety.varietyName}'s area updated.`, 'success')
+      setIsEditingArea(false)
+    } catch (error) {
+      showToast(toFriendlyMessage(error), 'error')
+    }
+  }
+
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 p-3">
-      <div>
+      <div className="flex-1">
         <p className="text-sm font-medium text-gray-900">{plotVariety.varietyName}</p>
-        <p className="text-sm text-gray-500">{plotVariety.areaAcres ? `${plotVariety.areaAcres} acres` : 'Area not recorded'}</p>
+        {isEditingArea ? (
+          <div className="mt-1 flex items-center gap-2">
+            <NumberInput
+              id={`edit-area-${plotVariety.id}`}
+              unit="acres"
+              step="0.01"
+              value={editedArea}
+              onChange={(e) => setEditedArea(e.target.value ? Number(e.target.value) : '')}
+              className="max-w-40"
+            />
+            <button
+              type="button"
+              onClick={handleSaveArea}
+              disabled={updateVariety.isPending}
+              className="text-sm font-medium text-brand-700 underline disabled:opacity-60"
+            >
+              {updateVariety.isPending ? 'Saving...' : 'Save'}
+            </button>
+            <button type="button" onClick={() => setIsEditingArea(false)} className="text-sm font-medium text-gray-600 underline">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">
+            {plotVariety.areaAcres ? `${plotVariety.areaAcres} acres` : 'Area not recorded'}
+            {canManage && (
+              <button type="button" onClick={startEditingArea} className="ml-2 text-sm font-medium text-brand-700 underline">
+                Edit
+              </button>
+            )}
+          </p>
+        )}
       </div>
       {canManage && (
         <div className="flex items-center gap-3">
@@ -430,14 +480,30 @@ function PlotVarietyRow({
   )
 }
 
-/** Add-variety mini-form — variety (excluding ones this plot already has) + optional area. */
-function AddVarietyForm({ plotId, existingVarietyNames }: { plotId: EntityId; existingVarietyNames: string[] }) {
+/** Add-variety mini-form — variety (excluding ones this plot already has) + area, with the same soft over-total warning as the registration flow. */
+function AddVarietyForm({
+  plotId,
+  plotAreaAcres,
+  existingVarieties,
+}: {
+  plotId: EntityId
+  plotAreaAcres?: string
+  existingVarieties: PlotVariety[]
+}) {
   const { showToast } = useToast()
   const addVariety = useAddPlotVariety(plotId)
   const [variety, setVariety] = useState<GrapeVariety | ''>('')
   const [areaAcres, setAreaAcres] = useState<number | ''>('')
 
-  const availableVarieties = GRAPE_VARIETIES.filter((v) => !existingVarietyNames.includes(v))
+  const availableVarieties = GRAPE_VARIETIES.filter((v) => !existingVarieties.some((ev) => ev.varietyName === v))
+
+  // Soft, dismissible-by-nature warning only — never blocks. No warning on
+  // an under-total (unallocated area within a plot is normal). Same
+  // threshold as the registration flow's multi-variety warning.
+  const existingTotal = existingVarieties.reduce((sum, v) => sum + (v.areaAcres ? Number(v.areaAcres) : 0), 0)
+  const projectedTotal = existingTotal + (areaAcres === '' ? 0 : areaAcres)
+  const plotTotal = plotAreaAcres ? Number(plotAreaAcres) : undefined
+  const showAreaWarning = !!plotTotal && projectedTotal > plotTotal
 
   const handleAdd = async () => {
     if (!variety) {
@@ -455,33 +521,43 @@ function AddVarietyForm({ plotId, existingVarietyNames }: { plotId: EntityId; ex
   }
 
   return (
-    <div className="mt-4 grid grid-cols-1 gap-3 border-t border-gray-200 pt-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
-      <FormField label="Add a variety" htmlFor="add-variety">
-        <Select
-          id="add-variety"
-          placeholder={availableVarieties.length === 0 ? 'All varieties already added' : 'Select variety'}
-          options={availableVarieties.map((v) => ({ value: v, label: v }))}
-          value={variety}
-          onChange={(e) => setVariety(e.target.value as GrapeVariety)}
-        />
-      </FormField>
-      <FormField label="Area" htmlFor="add-variety-area" hint="Optional">
-        <NumberInput
-          id="add-variety-area"
-          unit="acres"
-          step="0.01"
-          value={areaAcres}
-          onChange={(e) => setAreaAcres(e.target.value ? Number(e.target.value) : '')}
-        />
-      </FormField>
-      <button
-        type="button"
-        onClick={handleAdd}
-        disabled={addVariety.isPending || availableVarieties.length === 0}
-        className="min-h-11 rounded-lg bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60"
-      >
-        {addVariety.isPending ? 'Adding...' : 'Add variety'}
-      </button>
+    <div className="mt-4 border-t border-gray-200 pt-4">
+      {showAreaWarning && (
+        <div className="mb-3">
+          <Alert variant="warning" title="Variety areas add up to more than the plot's total area">
+            {projectedTotal} acres across this plot's varieties (including this one), but the plot is {plotTotal} acres.
+            This isn't blocked — double-check it wasn't a typo, then continue if it's correct.
+          </Alert>
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+        <FormField label="Add a variety" htmlFor="add-variety">
+          <Select
+            id="add-variety"
+            placeholder={availableVarieties.length === 0 ? 'All varieties already added' : 'Select variety'}
+            options={availableVarieties.map((v) => ({ value: v, label: v }))}
+            value={variety}
+            onChange={(e) => setVariety(e.target.value as GrapeVariety)}
+          />
+        </FormField>
+        <FormField label="Area" htmlFor="add-variety-area" hint="Optional">
+          <NumberInput
+            id="add-variety-area"
+            unit="acres"
+            step="0.01"
+            value={areaAcres}
+            onChange={(e) => setAreaAcres(e.target.value ? Number(e.target.value) : '')}
+          />
+        </FormField>
+        <button
+          type="button"
+          onClick={handleAdd}
+          disabled={addVariety.isPending || availableVarieties.length === 0}
+          className="min-h-11 rounded-lg bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60"
+        >
+          {addVariety.isPending ? 'Adding...' : 'Add variety'}
+        </button>
+      </div>
     </div>
   )
 }

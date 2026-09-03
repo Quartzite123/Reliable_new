@@ -5,8 +5,8 @@ A plot can hold multiple grape varieties; each variety runs its own
 independent pipeline (season_registration → Field QC → Lab → Contract →
 Harvest). These endpoints let workers manage the variety list for a plot.
 
-All three endpoints are scoped to plot_registration — variety management
-is part of plot setup. Previously ungated (auth-only) entirely, including
+All endpoints are scoped to plot_registration — variety management is
+part of plot setup. Previously ungated (auth-only) entirely, including
 the DELETE, which is destructive.
 """
 
@@ -19,7 +19,7 @@ from app.core.deps import require_phase
 from app.core.enums import PhaseKey
 from app.models.plot import Plot
 from app.models.plot_variety import PlotVariety
-from app.schemas.plot_variety import PlotVarietyCreate, PlotVarietyRead
+from app.schemas.plot_variety import PlotVarietyCreate, PlotVarietyRead, PlotVarietyUpdate
 
 router = APIRouter()
 
@@ -76,6 +76,26 @@ def list_varieties(
             .order_by(PlotVariety.variety_name)
         )
     )
+
+
+@router.patch(
+    "/plot-varieties/{variety_id}",
+    response_model=PlotVarietyRead,
+    dependencies=[_plot_registration],
+)
+def update_variety(
+    variety_id: int,
+    body: PlotVarietyUpdate,
+    db: Session = Depends(get_db),
+):
+    """area_acres only — see PlotVarietyUpdate's docstring for why variety_name is deliberately not editable here."""
+    pv = db.get(PlotVariety, variety_id)
+    if pv is None:
+        raise HTTPException(status_code=404, detail="Plot variety not found")
+    pv.area_acres = body.area_acres
+    db.commit()
+    db.refresh(pv)
+    return pv
 
 
 @router.delete(
