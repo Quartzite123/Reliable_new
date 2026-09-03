@@ -148,6 +148,7 @@ export function PlotDetailPage() {
 
             {isOpen && (
               <FieldQcRecordForm
+                plotId={plot.id}
                 registrationId={registration.id}
                 variety={variety}
                 isFollowUp={failed}
@@ -176,18 +177,28 @@ export function PlotDetailPage() {
  * second variety's inspection most needs to see which one they're on.
  */
 function FieldQcRecordForm({
+  plotId,
   registrationId,
   variety,
   isFollowUp,
   onDone,
 }: {
+  plotId: EntityId
   registrationId: EntityId
   variety?: string
   isFollowUp: boolean
   onDone: () => void
 }) {
   const { showToast } = useToast()
-  const submitFollowUp = useSubmitFollowUpFieldQc(registrationId)
+  // Bug fixed 2026-09-03: this used to be called with `registrationId` —
+  // the hook's parameter is the PLOT id (it invalidates plotsQueryKeys
+  // .detail(plotId), which is what PlotDetailPage's usePlotDetail is keyed
+  // on). Both are EntityId, so TypeScript couldn't catch the mismatch —
+  // it silently invalidated a query key nothing was subscribed to instead
+  // of erroring. The save always worked; the page just never refetched,
+  // so a worker who didn't manually reload could record the same
+  // inspection twice believing the first attempt hadn't saved.
+  const submitFollowUp = useSubmitFollowUpFieldQc(plotId)
 
   const {
     register,

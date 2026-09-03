@@ -39,6 +39,13 @@ export function useCreateContract() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: CreateContractInput) => contractsApi.create(input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: contractsQueryKeys.all }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: contractsQueryKeys.all })
+      // Was missing — the just-contracted registration stayed visible in
+      // "eligible plots for contract" until a reload, and clicking it
+      // again 409s (can_create_contract rejects a second contract) with
+      // no explanation of why something "on the list" just failed.
+      queryClient.invalidateQueries({ queryKey: contractsQueryKeys.eligible })
+    },
   })
 }
