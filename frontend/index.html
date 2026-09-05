@@ -4,7 +4,23 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#168A48" />
+    <meta name="theme-color" content="#0F5C37" />
+    <meta
+      name="description"
+      content="Reliable Fresh Export Management — traceability from farm to container."
+    />
+
+    <!-- Self-hosted so the service worker can precache it and the app keeps
+         its typography offline and on weak rural connections. Preloaded
+         because it is on the critical render path for every screen. -->
+    <link
+      rel="preload"
+      href="/fonts/inter-latin-variable.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+
     <title>Reliable Fresh — Export Management</title>
   </head>
   <body>

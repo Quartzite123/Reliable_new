@@ -21,7 +21,14 @@ interface DataTableProps<T> {
 
 /**
  * Renders as a real table on tablet/desktop and stacked cards on mobile
- * (prompt.md §25 — "record cards instead of wide tables" below tablet width).
+ * (prompt.md 25 — "record cards instead of wide tables" below tablet width).
+ *
+ * Changes made for scannability: the header row sticks while the body
+ * scrolls, so a worker reading row 40 still knows which column is which;
+ * rows alternate against a faint tint, which is the cheapest way to stop
+ * the eye slipping a line on a wide table; and the header label is
+ * uppercase-free but weighted, since all-caps costs legibility for
+ * readers with limited English.
  */
 export function DataTable<T>({
   columns,
@@ -37,26 +44,29 @@ export function DataTable<T>({
 
   return (
     <>
-      <div className="hidden overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-card sm:block">
-        <table className="w-full min-w-full divide-y divide-gray-200 text-left text-sm">
-          <thead className="bg-gray-50">
-            <tr>
+      <div className="hidden overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-card sm:block">
+        <table className="w-full min-w-full text-left text-sm">
+          <thead className="sticky top-0 z-10 bg-gray-100">
+            <tr className="border-b border-gray-200">
               {columns.map((col) => (
-                <th key={col.key} scope="col" className="px-4 py-3 font-semibold text-gray-700">
+                <th key={col.key} scope="col" className="px-4 py-3 font-semibold whitespace-nowrap text-gray-700">
                   {col.header}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 bg-white">
+          <tbody>
             {rows.map((row) => (
               <tr
                 key={getRowId(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={onRowClick ? 'cursor-pointer transition-colors hover:bg-brand-50/60' : undefined}
+                className={[
+                  'border-b border-gray-100 last:border-b-0 even:bg-gray-50/60',
+                  onRowClick ? 'cursor-pointer hover:bg-brand-50' : '',
+                ].join(' ')}
               >
                 {columns.map((col) => (
-                  <td key={col.key} className="px-4 py-3 text-gray-800">
+                  <td key={col.key} className="px-4 py-3 align-middle text-gray-800">
                     {col.render(row)}
                   </td>
                 ))}

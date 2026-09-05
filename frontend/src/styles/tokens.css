@@ -2,80 +2,118 @@
 
 /*
  * Design tokens for Reliable Fresh.
- * Field/lab/office/inventory workers use this on phones in bright sunlight
- * and weak connectivity, so tokens favor high contrast and large touch
- * targets over visual density.
  *
- * Visual language: a "color journey" from deep forest green (top/header,
- * premium anchor) through green/lime (highlights, KPIs) and light green
- * (secondary surfaces, active states) to pale cream/lime (soft backgrounds,
- * empty states) — used as gradients and tinted accents, never as flat
- * full-page fills.
+ * Audience: field, lab, office, packaging and stock workers, mostly on
+ * phones, often in bright sunlight, on weak rural networks, with low tech
+ * literacy. Tokens favour high contrast and large touch targets over
+ * visual density. English only.
+ *
+ * Governing principle (2026-09): GREEN IS THE FRAME, NOT THE CONTENT.
+ * The previous palette painted everything brand green — header, buttons,
+ * active nav, KPI icons and "Passed" badges all landed within a few
+ * percent of each other, so colour stopped carrying meaning and the app
+ * read as one flat green wash. Here, deep green is reserved for
+ * structural chrome (header, primary actions, active nav) and the colour
+ * budget is spent where this app actually needs it: on STATE. A worker
+ * scanning a list should be able to tell passed from blocked from in
+ * progress at a glance, in sunlight, without reading.
+ *
+ * Consequences of that principle, if you are editing this file later:
+ *   - Status colours are their own scale. They are deliberately NOT
+ *     brand-*. Do not "tidy" them back into the brand ramp.
+ *   - The page background is a tinted paper, not near-white, so white
+ *     cards read as raised surfaces. Flattening it back to #fafcfb is
+ *     what made the app look unfinished.
+ *   - Lime is an indicator, never a surface and never text.
  */
+
+/* Self-hosted Inter (latin, variable weight 100-900).
+   Self-hosted rather than Google Fonts CDN on purpose: this is a PWA used
+   on weak rural connections, so the font must be precacheable by the
+   service worker and must not depend on a third-party request. 48 KB. */
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('/fonts/inter-latin-variable.woff2') format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @theme {
   --font-sans:
-    'Inter', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+    'Inter Variable', 'Inter', 'Segoe UI', system-ui, -apple-system, Roboto,
+    sans-serif;
 
-  /* Brand green — re-anchored on the deep-forest journey (#076653 / #06342C)
-     at the dark end, still landing on a workable mid-green for everyday
-     buttons/links/active states. Used for: primary actions, active nav,
-     selected states, success/positive states. */
-  --color-brand-50: #f2fbf3;
-  --color-brand-100: #e2fbce;
-  --color-brand-200: #c3f0b0;
-  --color-brand-300: #8fdc93;
-  --color-brand-400: #4fc17d;
-  --color-brand-500: #22a86a;
-  --color-brand-600: #0f8f5c;
-  --color-brand-700: #076653;
-  --color-brand-800: #0e3f34;
-  --color-brand-900: #06342c;
+  /* Brand — a true leaf green, deepened and de-tealed from the old ramp.
+     Used for: primary actions, active nav, header chrome, links.
+     NOT used for status. */
+  --color-brand-50: #eef8f1;
+  --color-brand-100: #d5edda;
+  --color-brand-200: #aedcbb;
+  --color-brand-300: #7cc494;
+  --color-brand-400: #46a76d;
+  --color-brand-500: #1f8d52;
+  --color-brand-600: #157443;
+  --color-brand-700: #0f5c37;
+  --color-brand-800: #0b442a;
+  --color-brand-900: #072e1e;
 
-  /* Lime — the vivid accent from the journey's brightest gradient stop.
-     Sparingly: KPI highlights, progress fills, small badges/chips, gradient
-     stops. Never body text (too low-contrast on white). */
-  --color-lime-50: #fbfde8;
-  --color-lime-100: #f4f9c2;
-  --color-lime-200: #eaf291;
-  --color-lime-300: #e3ef26;
-  --color-lime-400: #cdd61f;
-  --color-lime-500: #a8b018;
-  --color-lime-600: #848c12;
+  /* Lime — young grape-leaf. Indicator only: the active-nav marker bar,
+     progress fills, small KPI accents. Never a surface, never text
+     (fails contrast on white at every step below 600). */
+  --color-lime-100: #f2f8d8;
+  --color-lime-200: #e3f0a8;
+  --color-lime-300: #c9e265;
+  --color-lime-400: #a8cc2f;
+  --color-lime-500: #86a51f;
+  --color-lime-600: #667d16;
 
-  /* Mint — the light-green gradient stop. Secondary surfaces, active-nav
-     background, supporting cards. */
-  --color-mint-50: #f4fbf0;
-  --color-mint-100: #e2fbce;
-  --color-mint-200: #cdf3ae;
+  /* Mint — supporting tinted surfaces (selected rows, soft callouts). */
+  --color-mint-50: #f3faf5;
+  --color-mint-100: #e4f4e9;
+  --color-mint-200: #cbe9d5;
 
-  /* Blush — the palest, warmest gradient stop. Bottom sections, empty
-     states, decorative background accents only. */
-  --color-blush-50: #fff8fb;
-  --color-blush-100: #ffddee;
+  /* Neutrals, warmed very slightly toward green so they sit with the
+     brand instead of fighting it. Every existing `text-gray-*`,
+     `bg-gray-*` and `border-gray-*` utility across the 233 untouched
+     feature files picks these up automatically. */
+  --color-gray-50: #f1f4f1;
+  --color-gray-100: #e7ebe8;
+  --color-gray-200: #dfe4e0;
+  --color-gray-300: #c7cec9;
+  --color-gray-400: #97a29b;
+  --color-gray-500: #6e7a73;
+  --color-gray-600: #55605a;
+  --color-gray-700: #3d4742;
+  --color-gray-800: #28312c;
+  --color-gray-900: #16211c;
 
-  /* Neutral scale re-anchored on a charcoal ink / soft gray border system,
-     so every existing `text-gray-*` / `border-gray-*` / `bg-gray-*` utility
-     picks this up automatically — no component markup changes required. */
-  --color-gray-50: #fafcfb;
-  --color-gray-100: #f3f5f4;
-  --color-gray-200: #e5e7eb;
-  --color-gray-300: #d7dbdf;
-  --color-gray-400: #9aa3ac;
-  --color-gray-500: #6b7280;
-  --color-gray-600: #57606a;
-  --color-gray-700: #3f4750;
-  --color-gray-800: #2b3239;
-  --color-gray-900: #1f2933;
+  /* Status — the app's real information layer.
+     Each state has a tinted background and a dark foreground that clears
+     4.5:1 on that background. Kept deliberately far apart in hue so they
+     survive sunlight, cheap phone screens and colour-blindness. Badges
+     also carry a dot, so colour is never the only signal. */
+  --color-status-passed: #0a5c32;
+  --color-status-passed-bg: #dcf5e3;
+  --color-status-failed: #a3161a;
+  --color-status-failed-bg: #fde3e3;
+  --color-status-progress: #1c4ba8;
+  --color-status-progress-bg: #dde8fd;
+  --color-status-blocked: #8a4b06;
+  --color-status-blocked-bg: #fdeed2;
+  --color-status-submitted: #5b2ca8;
+  --color-status-submitted-bg: #eae2fc;
+  --color-status-notstarted: #4a544e;
+  --color-status-notstarted-bg: #e9ecea;
 
-  --color-status-passed: #0f8f5c;
-  --color-status-failed: #dc2626;
-  --color-status-blocked: #b45309;
-  --color-status-progress: #2563eb;
-  --color-status-notstarted: #6b7280;
-  --color-status-submitted: #7c3aed;
-
-  --shadow-card: 0 1px 2px rgba(6, 52, 44, 0.05), 0 1px 3px rgba(6, 52, 44, 0.07);
-  --shadow-card-hover: 0 2px 6px rgba(6, 52, 44, 0.07), 0 4px 12px rgba(6, 52, 44, 0.09);
+  /* Two shadow levels only. Green-tinted so cards sit on the paper
+     background rather than floating in a grey haze. */
+  --shadow-card: 0 1px 2px rgba(11, 58, 44, 0.04), 0 1px 3px rgba(11, 58, 44, 0.06);
+  --shadow-card-hover: 0 2px 6px rgba(11, 58, 44, 0.06), 0 6px 16px rgba(11, 58, 44, 0.08);
 
   --breakpoint-xs: 400px;
 }
@@ -93,11 +131,14 @@ body,
 body {
   margin: 0;
   background: var(--color-gray-50);
+  color: var(--color-gray-900);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Slightly open tracking at small sizes reads better on low-DPI phone
+     screens in daylight. */
+  letter-spacing: 0.005em;
 }
 
-/* Baseline touch target + focus visibility for a low-tech-literacy audience */
 button,
 a,
 input,
@@ -112,8 +153,22 @@ a {
     background-color 150ms ease,
     border-color 150ms ease,
     color 150ms ease,
-    box-shadow 150ms ease,
-    transform 150ms ease;
+    box-shadow 150ms ease;
+}
+
+/* Headings tighten up; body stays open for readability. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.014em;
+}
+
+/* Tabular figures everywhere numbers are compared down a column —
+   weights, temperatures, box counts, percentages. Without this, Inter's
+   proportional digits make a column of numbers ragged and slow to scan. */
+table,
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
 
 :focus-visible {
@@ -121,17 +176,36 @@ a {
   outline-offset: 2px;
 }
 
-/* Color-journey gradients — used selectively (header, KPI accents, soft
-   section/empty-state backgrounds), never as a full-page background. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- Named backgrounds -----------------------------------------------
+   Kept as classes (not utilities) because feature files already
+   reference them by these exact names. Same names, new values. */
+
 .bg-gradient-forest {
-  background-image: linear-gradient(135deg, #076653 0%, #06342c 100%);
+  background-image: linear-gradient(135deg, #0f5c37 0%, #072e1e 100%);
 }
+
+/* KPI accent. Now a two-stop green rather than the old green-to-lime
+   sweep, which was the single biggest source of the "everything is
+   green" impression on the dashboard. */
 .bg-gradient-kpi {
-  background-image: linear-gradient(135deg, #0c342c 0%, #076653 55%, #4fae3f 100%);
+  background-image: linear-gradient(135deg, #0b442a 0%, #157443 100%);
 }
+
 .bg-gradient-mint {
-  background-image: linear-gradient(135deg, #e2fbce 0%, #f4fbf0 100%);
+  background-image: linear-gradient(135deg, #e4f4e9 0%, #f3faf5 100%);
 }
+
+/* Empty states and soft sections. Was a four-stop pink/cream/lime blend
+   that read as a bug on a farm ERP; now a quiet single-hue lift. */
 .bg-gradient-soft {
-  background-image: linear-gradient(135deg, #fefeff 0%, #fef8fb 45%, #fbfbef 75%, #f9fbea 100%);
+  background-image: linear-gradient(160deg, #f3faf5 0%, #f1f4f1 100%);
 }

@@ -9,7 +9,14 @@ interface HeaderProps {
   onMenuClick?: () => void
 }
 
-/** Deep-forest gradient anchor — the top of the app's color journey (dark forest -> lime -> mint -> cream, elsewhere). */
+/**
+ * Deep-forest bar anchoring the top of every screen.
+ *
+ * Logout was previously a white pill with red text — the highest-contrast
+ * element on the page, which made "sign out" the most visually urgent
+ * action on a screen where it is the least important one. It is now a
+ * quiet ghost button on the header itself, still a full 44px target.
+ */
 export function Header({ title, onMenuClick }: HeaderProps) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -20,14 +27,14 @@ export function Header({ title, onMenuClick }: HeaderProps) {
   }
 
   return (
-    <header className="bg-gradient-forest flex min-h-16 items-center justify-between gap-3 px-4 py-2 shadow-card sm:px-6">
+    <header className="bg-gradient-forest flex min-h-16 items-center justify-between gap-2 px-3 py-2 shadow-card sm:gap-3 sm:px-6">
       <div className="flex min-w-0 items-center gap-2">
         {onMenuClick && (
           <button
             type="button"
             onClick={onMenuClick}
             aria-label="Open menu"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-brand-100 hover:bg-white/10 lg:hidden"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-brand-100 hover:bg-white/10 lg:hidden"
           >
             <MenuIcon className="h-5 w-5" />
           </button>
@@ -36,29 +43,30 @@ export function Header({ title, onMenuClick }: HeaderProps) {
         <p className="truncate text-base font-semibold text-white">{title ?? 'Reliable Fresh'}</p>
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         <Link
           to="/notifications"
           aria-label="Notifications"
-          className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-brand-100 hover:bg-white/10 hover:text-white"
+          className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-brand-100 hover:bg-white/10 hover:text-white"
         >
           <BellIcon className="h-5 w-5" />
         </Link>
 
         {user && (
-          <div className="hidden text-right sm:block">
-            <p className="text-sm font-medium text-white">{user.name}</p>
-            <p className="text-xs text-brand-200">{ROLE_LABELS[user.role]}</p>
+          <div className="hidden min-w-0 text-right sm:block">
+            <p className="truncate text-sm font-semibold text-white">{user.name}</p>
+            <p className="truncate text-xs text-brand-200">{ROLE_LABELS[user.role]}</p>
           </div>
         )}
 
         <button
           type="button"
           onClick={handleLogout}
-          className="flex min-h-11 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3.5 text-sm font-medium text-red-600 transition-all duration-200 ease-out hover:border-red-300 hover:bg-red-50 hover:text-red-700 active:scale-[0.98] focus-visible:outline-red-500"
+          aria-label="Log out"
+          className="ml-1 flex min-h-11 items-center gap-1.5 rounded-lg border border-white/20 px-3 text-sm font-medium text-brand-100 hover:border-white/40 hover:bg-white/10 hover:text-white focus-visible:outline-white"
         >
           <LogOutIcon className="h-4 w-4" />
-          Logout
+          <span className="hidden sm:inline">Log out</span>
         </button>
       </div>
     </header>
